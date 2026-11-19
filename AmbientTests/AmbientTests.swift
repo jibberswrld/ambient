@@ -1,14 +1,15 @@
 //
-//  leanring_buddyTests.swift
-//  leanring-buddyTests
+//  AmbientTests.swift
+//  AmbientTests
 //
 //  Created by thorfinn on 3/2/26.
 //
 
 import Testing
-@testable import leanring_buddy
+@testable import Ambient
 
-struct leanring_buddyTests {
+@MainActor
+struct AmbientTests {
 
     @Test func firstPermissionRequestUsesSystemPromptOnly() async throws {
         let presentationDestination = WindowPositionManager.permissionRequestPresentationDestination(

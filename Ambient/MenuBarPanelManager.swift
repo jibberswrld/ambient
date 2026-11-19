@@ -67,6 +67,8 @@ final class MenuBarPanelManager: NSObject {
 
         button.image = makeClickyMenuBarIcon()
         button.image?.isTemplate = true
+        button.toolTip = "Ambient"
+        button.setAccessibilityLabel("Ambient")
         button.action = #selector(statusItemClicked)
         button.target = self
     }
