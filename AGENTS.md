@@ -23,6 +23,10 @@ All API keys live on a Cloudflare Worker proxy — nothing sensitive ships in th
 - **Concurrency**: `@MainActor` isolation, async/await throughout
 - **Analytics**: PostHog via `ClickyAnalytics.swift`
 
+### Ambient connector subsystem
+
+The Ambient fork adds `Packages/AmbientKit/Sources/AmbientConnectors` and the standalone `connector/` service. The Mac client depends only on `AmbientContracts`; the service verifies claimed publik credentials and holds `COMPOSIO_API_KEY` server-side. Composio Tool Router owns discovery, authorization, schemas and execution without an app catalog. See `connector/README.md` for routes, Vercel settings, Swift integration and isolated test commands. Do not deploy the service as part of local connector work.
+
 ### API Proxy (Cloudflare Worker)
 
 The app never calls external APIs directly. All requests go through a Cloudflare Worker (`worker/src/index.ts`) that holds the real API keys as secrets.
@@ -74,6 +78,11 @@ Worker vars: `ELEVENLABS_VOICE_ID`
 | `ClickyAnalytics.swift` | ~121 | PostHog analytics integration for usage tracking. |
 | `WindowPositionManager.swift` | ~262 | Window placement logic, Screen Recording permission flow, and accessibility permission helpers. |
 | `AppBundleConfiguration.swift` | ~28 | Runtime configuration reader for keys stored in the app bundle Info.plist. |
+| `Packages/AmbientKit/Sources/AmbientConnectors/AmbientConnectorClient.swift` | ~154 | Publik-authenticated connector HTTP client and settings operations. |
+| `Packages/AmbientKit/Sources/AmbientConnectors/ComposioToolProvider.swift` | ~154 | Cached Tool Router definitions, execution, result bounds and authorization callback. |
+| `connector/src/service.ts` | ~139 | Claimed-account verification and unrestricted Composio session routes. |
+| `connector/src/http.ts` | ~36 | Shared Vercel and local Node HTTP adapter. |
+| `connector/src/local.ts` | ~6 | Loopback development server on port 3019. |
 | `worker/src/index.ts` | ~142 | Cloudflare Worker proxy. Three routes: `/chat` (Claude), `/tts` (ElevenLabs), `/transcribe-token` (AssemblyAI temp token). |
 
 ## Build & Run
