@@ -3,16 +3,35 @@ import PackageDescription
 
 // One target per subsystem. Every subsystem depends only on AmbientContracts, never on a sibling,
 // so each can be built and tested alone: `swift build --target AmbientMemory`.
-let subsystemNames = ["AmbientAgent", "AmbientBackground", "AmbientConnectors", "AmbientMemory", "AmbientUI"]
-
 let package = Package(
     name: "AmbientKit",
     platforms: [.macOS(.v14)],
     products: [
-        .library(name: "AmbientKit", targets: ["AmbientContracts"] + subsystemNames)
+        .library(
+            name: "AmbientKit",
+            targets: ["AmbientContracts", "AmbientAgent", "AmbientBackground", "AmbientConnectors", "AmbientMemory", "AmbientUI"]
+        )
     ],
-    targets: [.target(name: "AmbientContracts")]
-        + subsystemNames.map { .target(name: $0, dependencies: ["AmbientContracts"]) }
-        + subsystemNames.map { .testTarget(name: "\($0)Tests", dependencies: [.target(name: $0)]) },
+    targets: [
+        .target(name: "AmbientContracts"),
+
+        .target(name: "AmbientAgent", dependencies: ["AmbientContracts"]),
+        .testTarget(name: "AmbientAgentTests", dependencies: ["AmbientAgent"]),
+
+        .target(name: "AmbientBackground", dependencies: ["AmbientContracts"]),
+        .testTarget(name: "AmbientBackgroundTests", dependencies: ["AmbientBackground"]),
+
+        .target(name: "AmbientConnectors", dependencies: ["AmbientContracts"]),
+        .testTarget(name: "AmbientConnectorsTests", dependencies: ["AmbientConnectors"]),
+
+        // BuiltInSkills holds one folder per skill that ships with the app, each with a SKILL.md.
+        .target(name: "AmbientMemory", dependencies: ["AmbientContracts"], resources: [.copy("BuiltInSkills")]),
+        .testTarget(name: "AmbientMemoryTests", dependencies: ["AmbientMemory"]),
+
+        .target(name: "AmbientUI", dependencies: ["AmbientContracts"]),
+        .testTarget(name: "AmbientUITests", dependencies: ["AmbientUI"]),
+        // Runs the interface alone with scripted states, to look at it without the rest of the app.
+        .executableTarget(name: "AmbientUIDemo", dependencies: ["AmbientUI"]),
+    ],
     swiftLanguageModes: [.v5]
 )
