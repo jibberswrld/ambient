@@ -58,7 +58,7 @@ public enum AmbientSnapshotRenderer {
         }
     }
 
-    private static func scaledToFill(_ image: NSImage, canvasSize: CGSize) -> NSImage {
+    static func scaledToFill(_ image: NSImage, canvasSize: CGSize) -> NSImage {
         let output = NSImage(size: canvasSize)
         output.lockFocus()
         let imageAspect = image.size.width / max(image.size.height, 1)
@@ -71,7 +71,7 @@ public enum AmbientSnapshotRenderer {
         return output
     }
 
-    private static func blurred(_ image: NSImage, radius: Double) -> NSImage {
+    static func blurred(_ image: NSImage, radius: Double) -> NSImage {
         guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return image }
         let inputImage = CIImage(cgImage: cgImage)
         // Clamping first stops the blur from pulling transparent pixels in at the edges.
@@ -79,5 +79,49 @@ public enum AmbientSnapshotRenderer {
               let outputCGImage = CIContext().createCGImage(blurredImage, from: inputImage.extent)
         else { return image }
         return NSImage(cgImage: outputCGImage, size: image.size)
+    }
+}
+
+extension AmbientSnapshotRenderer {
+    /// Any view (the pointer, for example) on a canvas filled with `backdrop`, with glass drawn as in a capture.
+    public static func renderOverBackdrop<Content: View>(_ content: Content, canvasSize: CGSize, backdrop: NSImage, scale: CGFloat = 2) -> NSImage? {
+        let backdropFillingCanvas = scaledToFill(backdrop, canvasSize: canvasSize)
+        let snapshotBackdrop = AmbientSnapshotBackdrop(blurredImage: blurred(backdropFillingCanvas, radius: 26), canvasSize: canvasSize)
+        let canvas = ZStack(alignment: .topLeading) {
+            Image(nsImage: backdropFillingCanvas)
+                .resizable()
+                .frame(width: canvasSize.width, height: canvasSize.height)
+            content
+                .frame(width: canvasSize.width, height: canvasSize.height)
+        }
+        .frame(width: canvasSize.width, height: canvasSize.height)
+        .environment(\.ambientSurfaceRenderingMode, .snapshot(snapshotBackdrop))
+        let renderer = ImageRenderer(content: canvas)
+        renderer.scale = scale
+        return renderer.nsImage
+    }
+}
+
+/// The onboarding screens as plain views, for captures and previews without opening the onboarding window.
+@MainActor
+public enum AmbientOnboardingPreview {
+    public static func gate(_ content: AmbientGateContent) -> some View {
+        previewRoot(.gate(content))
+    }
+
+    public static func permissions(_ permissionsModel: AmbientPermissionsModel) -> some View {
+        previewRoot(.permissions(permissionsModel))
+    }
+
+    public static func firstRun(_ firstRunModel: AmbientFirstRunModel, showingEdgeStep: Bool = false) -> some View {
+        if showingEdgeStep { firstRunModel.advanceToEdgeStep() }
+        return previewRoot(.firstRun(firstRunModel))
+    }
+
+    private static func previewRoot(_ screen: AmbientOnboardingCoordinator.Screen) -> some View {
+        let coordinator = AmbientOnboardingCoordinator()
+        coordinator.screen = screen
+        return AmbientOnboardingRootView(coordinator: coordinator)
+            .frame(width: AmbientOnboardingWindowController.windowSize.width, height: AmbientOnboardingWindowController.windowSize.height)
     }
 }
