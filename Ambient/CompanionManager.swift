@@ -71,24 +71,12 @@ final class CompanionManager: ObservableObject {
     /// BlueCursorView uses this instead of a random pointer phrase.
     @Published var detectedElementBubbleText: String?
 
-    // MARK: - Onboarding Video State (shared across all screen overlays)
-
-    @Published var onboardingVideoPlayer: AVPlayer?
-    @Published var showOnboardingVideo: Bool = false
-    @Published var onboardingVideoOpacity: Double = 0.0
-    private var onboardingVideoEndObserver: NSObjectProtocol?
-
     // MARK: - Onboarding Prompt Bubble
 
-    /// Text streamed character-by-character on the cursor after the onboarding video ends.
+    /// Text streamed character-by-character on the cursor when the first-run welcome ends.
     @Published var onboardingPromptText: String = ""
     @Published var onboardingPromptOpacity: Double = 0.0
     @Published var showOnboardingPrompt: Bool = false
-
-    // MARK: - Onboarding Music
-
-    private var onboardingMusicPlayer: AVAudioPlayer?
-    private var onboardingMusicFadeTimer: Timer?
 
     let buddyDictationManager = BuddyDictationManager()
     let globalPushToTalkShortcutMonitor = GlobalPushToTalkShortcutMonitor()
@@ -114,9 +102,7 @@ final class CompanionManager: ObservableObject {
     /// User preference for whether the Clicky cursor should be shown.
     /// When toggled off, the overlay is hidden and push-to-talk is disabled.
     /// Persisted to UserDefaults so the choice survives app restarts.
-    @Published var isClickyCursorEnabled: Bool = UserDefaults.standard.object(forKey: "isClickyCursorEnabled") == nil
-        ? true
-        : UserDefaults.standard.bool(forKey: "isClickyCursorEnabled")
+    @Published var isClickyCursorEnabled: Bool = UserDefaults.standard.bool(forKey: "isClickyCursorEnabled")
 
     func setClickyCursorEnabled(_ enabled: Bool) {
         isClickyCursorEnabled = enabled
@@ -157,95 +143,22 @@ final class CompanionManager: ObservableObject {
         }
     }
 
-    /// Called by BlueCursorView after the buddy finishes its pointing
-    /// animation and returns to cursor-following mode.
-    /// Triggers the onboarding sequence — dismisses the panel and restarts
-    /// the overlay so the welcome animation and intro video play.
+    /// Finishes first-run setup. There is no intro sequence: the panel closes and Ambient is ready.
     func triggerOnboarding() {
-        // Post notification so the panel manager can dismiss the panel
         NotificationCenter.default.post(name: .clickyDismissPanel, object: nil)
-
-        // Mark onboarding as completed so the Start button won't appear
-        // again on future launches — the cursor will auto-show instead
         hasCompletedOnboarding = true
-
-
-        // Play Besaid theme at 60% volume, fade out after 1m 30s
-        startOnboardingMusic()
-
-        // Show the overlay for the first time — isFirstAppearance triggers
-        // the welcome animation and onboarding video
-        overlayWindowManager.showOverlay(onScreens: NSScreen.screens, companionManager: self)
-        isOverlayVisible = true
-    }
-
-    /// Replays the onboarding experience from the "Watch Onboarding Again"
-    /// footer link. Same flow as triggerOnboarding but the cursor overlay
-    /// is already visible so we just restart the welcome animation and video.
-    func replayOnboarding() {
-        NotificationCenter.default.post(name: .clickyDismissPanel, object: nil)
-        startOnboardingMusic()
-        // Tear down any existing overlays and recreate with isFirstAppearance = true
-        overlayWindowManager.hasShownOverlayBefore = false
-        overlayWindowManager.showOverlay(onScreens: NSScreen.screens, companionManager: self)
-        isOverlayVisible = true
-    }
-
-    private func stopOnboardingMusic() {
-        onboardingMusicFadeTimer?.invalidate()
-        onboardingMusicFadeTimer = nil
-        onboardingMusicPlayer?.stop()
-        onboardingMusicPlayer = nil
-    }
-
-    private func startOnboardingMusic() {
-        stopOnboardingMusic()
-        guard let musicURL = Bundle.main.url(forResource: "ff", withExtension: "mp3") else {
-            print("⚠️ Ambient: ff.mp3 not found in bundle")
-            return
-        }
-
-        do {
-            let player = try AVAudioPlayer(contentsOf: musicURL)
-            player.volume = 0.3
-            player.play()
-            self.onboardingMusicPlayer = player
-
-            // After 1m 30s, fade the music out over 3s
-            onboardingMusicFadeTimer = Timer.scheduledTimer(withTimeInterval: 90.0, repeats: false) { [weak self] _ in
-                self?.fadeOutOnboardingMusic()
-            }
-        } catch {
-            print("⚠️ Ambient: Failed to play onboarding music: \(error)")
-        }
-    }
-
-    private func fadeOutOnboardingMusic() {
-        guard let player = onboardingMusicPlayer else { return }
-
-        let fadeSteps = 30
-        let fadeDuration: Double = 3.0
-        let stepInterval = fadeDuration / Double(fadeSteps)
-        let volumeDecrement = player.volume / Float(fadeSteps)
-        var stepsRemaining = fadeSteps
-
-        onboardingMusicFadeTimer = Timer.scheduledTimer(withTimeInterval: stepInterval, repeats: true) { [weak self] timer in
-            stepsRemaining -= 1
-            player.volume -= volumeDecrement
-
-            if stepsRemaining <= 0 {
-                timer.invalidate()
-                player.stop()
-                self?.onboardingMusicPlayer = nil
-                self?.onboardingMusicFadeTimer = nil
-            }
-        }
     }
 
     func clearDetectedElementLocation() {
         detectedElementScreenLocation = nil
         detectedElementDisplayFrame = nil
         detectedElementBubbleText = nil
+        // The pointer exists only to point. Once it has finished, take it off screen
+        // unless the person asked to keep it visible.
+        if !isClickyCursorEnabled && isOverlayVisible {
+            overlayWindowManager.fadeOutAndHideOverlay()
+            isOverlayVisible = false
+        }
     }
 
     func stop() {
@@ -389,7 +302,6 @@ final class CompanionManager: ObservableObject {
             clearDetectedElementLocation()
             runtime.beginListening()
             guard case .listening = runtime.state.phase else { return }
-            showOverlayForInteraction()
             pendingKeyboardShortcutStartTask = Task { await buddyDictationManager.startRecording() }
         case .released:
             pendingKeyboardShortcutStartTask?.cancel()
@@ -398,60 +310,6 @@ final class CompanionManager: ObservableObject {
                 runtime.cancelCurrentTurn()
             }
         case .none: break
-        }
-    }
-
-    // MARK: - Onboarding Video
-
-    /// Keeps the inherited intro playable until the replacement onboarding is integrated.
-    func setupOnboardingVideo() {
-        guard let videoURL = URL(string: "https://stream.mux.com/e5jB8UuSrtFABVnTHCR7k3sIsmcUHCyhtLu1tzqLlfs.m3u8") else { return }
-
-        let player = AVPlayer(url: videoURL)
-        player.isMuted = false
-        player.volume = 0.0
-        self.onboardingVideoPlayer = player
-        self.showOnboardingVideo = true
-        self.onboardingVideoOpacity = 0.0
-
-        // Start playback immediately — the video plays while invisible,
-        // then we fade in both the visual and audio over 1s.
-        player.play()
-
-        // Wait for SwiftUI to mount the view, then set opacity to 1.
-        // The .animation modifier on the view handles the actual animation.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            self.onboardingVideoOpacity = 1.0
-            // Fade audio volume from 0 → 1 over 2s to match visual fade
-            self.fadeInVideoAudio(player: player, targetVolume: 1.0, duration: 2.0)
-        }
-
-        // Fade out and clean up when the video finishes
-        onboardingVideoEndObserver = NotificationCenter.default.addObserver(
-            forName: AVPlayerItem.didPlayToEndTimeNotification,
-            object: player.currentItem,
-            queue: .main
-        ) { [weak self] _ in
-            guard let self else { return }
-            self.onboardingVideoOpacity = 0.0
-            // Wait for the 2s fade-out animation to complete before tearing down
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                self.tearDownOnboardingVideo()
-                // After the video disappears, stream in the prompt to try talking
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    self.startOnboardingPromptStream()
-                }
-            }
-        }
-    }
-
-    func tearDownOnboardingVideo() {
-        showOnboardingVideo = false
-        onboardingVideoPlayer?.pause()
-        onboardingVideoPlayer = nil
-        if let observer = onboardingVideoEndObserver {
-            NotificationCenter.default.removeObserver(observer)
-            onboardingVideoEndObserver = nil
         }
     }
 
@@ -488,23 +346,5 @@ final class CompanionManager: ObservableObject {
         }
     }
 
-    /// Gradually raises an AVPlayer's volume from its current level to the
-    /// target over the specified duration, creating a smooth audio fade-in.
-    private func fadeInVideoAudio(player: AVPlayer, targetVolume: Float, duration: Double) {
-        let steps = 20
-        let stepInterval = duration / Double(steps)
-        let volumeIncrement = (targetVolume - player.volume) / Float(steps)
-        var stepsRemaining = steps
-
-        Timer.scheduledTimer(withTimeInterval: stepInterval, repeats: true) { timer in
-            stepsRemaining -= 1
-            player.volume += volumeIncrement
-
-            if stepsRemaining <= 0 {
-                timer.invalidate()
-                player.volume = targetVolume
-            }
-        }
-    }
 
 }
