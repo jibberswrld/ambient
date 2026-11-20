@@ -174,7 +174,8 @@ public enum Publik {
                 if a == "timeout" { signNote = "No sign-in after 10 minutes. Click Sign in with publik to try again."; signPoll = false }
                 continue
             }
-            var choice = usesAI ? readCredential()?.choice : nil
+            // An environment override already chooses the provider and must never be persisted.
+            var choice = usesAI ? (envKey != nil ? "publik" : readCredential()?.choice) : nil
             if usesAI && choice == nil {
                 if hasPlan(w) { planNote = nil; planPoll = false } // the plan is there: Connect your plan
                 let a = await ask(ui, gateScreen("choose", w, note: planNote), key: c.key, until: planPoll ? hasPlan : nil)

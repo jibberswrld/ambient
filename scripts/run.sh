@@ -27,6 +27,8 @@ codesign --verify --strict "$app_path"
 
 # Send the app its normal termination signal and wait for that exact process.
 while read -r running_process_id; do
+    # Other worktrees may be running their own build. Only quit this executable.
+    [[ "$(ps -p "$running_process_id" -o comm=)" == "$app_path/Contents/MacOS/Ambient" ]] || continue
     kill -TERM "$running_process_id"
     for ((attempt = 0; attempt < 50; attempt++)); do
         if ! kill -0 "$running_process_id" 2>/dev/null; then
@@ -40,5 +42,13 @@ while read -r running_process_id; do
     fi
 done < <(pgrep -x Ambient || true)
 
-open -n "$app_path"
+# LaunchServices does not automatically inherit this shell's environment.
+# Pass only configured overrides; never persist them in defaults or the app bundle.
+launch_options=()
+for environment_name in PUBLIK_API_KEY PUBLIK_API_BASE_URL AMBIENT_CONNECTOR_ORIGIN; do
+    if [[ -n "${!environment_name:-}" ]]; then
+        launch_options+=(--env "$environment_name=${!environment_name}")
+    fi
+done
+open -n "${launch_options[@]}" --stdout "$derived_data_path/app-stdout.log" --stderr "$derived_data_path/app-stderr.log" "$app_path" --args "$@"
 echo "Launched $app_path"
