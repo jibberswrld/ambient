@@ -21,11 +21,22 @@ public struct AmbientSnapshotBackdrop {
     }
 }
 
+private struct AmbientForcesIncreasedContrastKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
 private struct AmbientSurfaceRenderingModeKey: EnvironmentKey {
     static let defaultValue: AmbientSurfaceRenderingMode = .live
 }
 
 public extension EnvironmentValues {
+    /// Draws surfaces as if Increase Contrast were on. SwiftUI's own contrast value cannot be set from code, so still
+    /// captures use this to check the high-contrast look.
+    var ambientForcesIncreasedContrast: Bool {
+        get { self[AmbientForcesIncreasedContrastKey.self] }
+        set { self[AmbientForcesIncreasedContrastKey.self] = newValue }
+    }
+
     var ambientSurfaceRenderingMode: AmbientSurfaceRenderingMode {
         get { self[AmbientSurfaceRenderingModeKey.self] }
         set { self[AmbientSurfaceRenderingModeKey.self] = newValue }
@@ -49,12 +60,13 @@ struct AmbientSmokedGlassBackground: View {
     @Environment(\.ambientSurfaceRenderingMode) private var renderingMode
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+    @Environment(\.ambientForcesIncreasedContrast) private var forcesIncreasedContrast
 
     private var shape: RoundedRectangle {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
     }
 
-    private var isIncreasedContrast: Bool { colorSchemeContrast == .increased }
+    private var isIncreasedContrast: Bool { colorSchemeContrast == .increased || forcesIncreasedContrast }
 
     var body: some View {
         ZStack {

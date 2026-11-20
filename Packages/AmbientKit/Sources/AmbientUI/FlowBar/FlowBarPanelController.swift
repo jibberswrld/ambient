@@ -130,6 +130,15 @@ public final class FlowBarPanelController {
         if edge != previousEdge { model.onDockEdgeChanged?(edge) }
     }
 
+    /// The bar's window, for captures. Do not reconfigure it.
+    public var panelWindow: NSWindow { panel }
+
+    /// The display the bar is docked to.
+    public var dockedScreen: NSScreen? { resolvedScreen() }
+
+    /// Where the drawn glass is right now, in screen coordinates (origin bottom-left).
+    public var barSurfaceFrameOnScreen: CGRect { surfaceFrameOnScreen }
+
     // MARK: Placement
 
     private func resolvedScreen() -> NSScreen? {

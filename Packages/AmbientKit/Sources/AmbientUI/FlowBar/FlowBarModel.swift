@@ -368,7 +368,8 @@ public final class FlowBarModel {
         returnToIdle()
     }
 
-    func beginTyping() {
+    /// Opens the text field. The bar does this itself on a click; the app may also call it (from a menu item).
+    public func beginTyping() {
         guard turnPhase != .listening && turnPhase != .transcribing else { return }
         isTaskTrayExpanded = false
         isTyping = true
@@ -421,7 +422,8 @@ public final class FlowBarModel {
         returnToIdle()
     }
 
-    func toggleTaskTray() {
+    /// Opens or closes the background task tray.
+    public func toggleTaskTray() {
         isTaskTrayExpanded.toggle()
         if isTaskTrayExpanded { recentlyFinishedTask = nil }
     }
@@ -434,8 +436,17 @@ public final class FlowBarModel {
     func dismissBackgroundTask(_ taskID: UUID) { onDismissBackgroundTask?(taskID) }
     func openBackgroundTaskTranscript(_ taskID: UUID) { onOpenBackgroundTaskTranscript?(taskID) }
 
+    /// Holds the hover presentation regardless of where the pointer is. Only for previews and still captures,
+    /// where there is no real pointer to hover with.
+    public func pinHoverForPreview(_ isPinned: Bool) {
+        isHoverPinnedForPreview = isPinned
+        setPointerHovering(isPinned)
+    }
+    private var isHoverPinnedForPreview = false
+
     /// The pointer moved over or off the bar. Hovering a reply or error pauses its linger timer.
     func setPointerHovering(_ isHovering: Bool) {
+        if isHoverPinnedForPreview && !isHovering { return }
         guard isHovering != isPointerHovering else { return }
         isPointerHovering = isHovering
         if !isHovering { isShowingToolCallTrail = false }
