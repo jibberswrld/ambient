@@ -91,12 +91,18 @@ public actor AmbientAgentSession: AgentSession {
                 let reply = try await client.stream(body: body) { fragment in continuation.yield(.textDelta(fragment)) }
                 try Task.checkCancellation()
                 finalText += reply.text
+                // Text spoken before a tool call and text spoken after it are separate paragraphs.
+                // Without a break they run together ("...a video.Pointed at...").
+                if !reply.text.isEmpty && !reply.toolCalls.isEmpty {
+                    finalText += "\n\n"
+                    continuation.yield(.textDelta("\n\n"))
+                }
                 currentTurn.append(ChatMessage(role: "assistant", content: reply.text.isEmpty ? .null : .string(reply.text), toolCalls: reply.toolCalls.isEmpty ? nil : reply.toolCalls))
                 if reply.toolCalls.isEmpty {
                     guard activeTurn?.id == identifier else { return }
                     history = priorTurns + [currentTurn]
                     activeTurn = nil
-                    continuation.yield(.finished(finalText: finalText))
+                    continuation.yield(.finished(finalText: finalText.trimmingCharacters(in: .whitespacesAndNewlines)))
                     continuation.finish()
                     return
                 }

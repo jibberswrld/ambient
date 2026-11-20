@@ -124,7 +124,7 @@ final class AmbientAgentTests: XCTestCase {
             return streamResponse(event(["content": "Done."], finish: "stop"))
         }
         let events = await collect(session(providers: [provider]).send(.init(text: "Use the tool")))
-        XCTAssertEqual(finalText(events), "Checking… Done."); XCTAssertEqual(count, 2); XCTAssertNil(failure(events))
+        XCTAssertEqual(finalText(events), "Checking… \n\nDone."); XCTAssertEqual(count, 2); XCTAssertNil(failure(events))
         XCTAssertTrue(events.contains { if case .toolStarted(_, "echo_tool", "Echoing value") = $0 { return true }; return false })
     }
     func testParallelToolsAndResultImagesFollowAllToolMessages() async {
