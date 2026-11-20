@@ -7,6 +7,18 @@
 	objects = {
 
 
+/* Begin PBXBuildFile section */
+        A11000000000000000000001 /* AmbientKit in Frameworks */ = {isa = PBXBuildFile; productRef = A11000000000000000000002 /* AmbientKit */; };
+/* End PBXBuildFile section */
+
+/* Begin XCLocalSwiftPackageReference section */
+        A11000000000000000000003 /* AmbientKit */ = {isa = XCLocalSwiftPackageReference; relativePath = Packages/AmbientKit; };
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+        A11000000000000000000002 /* AmbientKit */ = {isa = XCSwiftPackageProductDependency; productName = AmbientKit; };
+/* End XCSwiftPackageProductDependency section */
+
 /* Begin PBXContainerItemProxy section */
 		28F22CCD2F56440300A0FC59 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -67,6 +79,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+                A11000000000000000000001 /* AmbientKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -127,6 +140,7 @@
 			);
 			name = "Ambient";
 			packageProductDependencies = (
+                A11000000000000000000002 /* AmbientKit */,
 			);
 			productName = "Ambient";
 			productReference = 28F22CBF2F56440300A0FC59 /* Ambient.app */;
@@ -211,6 +225,7 @@
 			mainGroup = 28F22CB62F56440300A0FC59;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+                A11000000000000000000003 /* AmbientKit */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 28F22CC02F56440300A0FC59 /* Products */;

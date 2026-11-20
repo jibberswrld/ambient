@@ -4,13 +4,22 @@
 <dict>
 	<key>LSUIElement</key>
 	<true/>
-	<key>VoiceTranscriptionProvider</key>
-	<string>assemblyai</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Ambient uses your microphone so you can talk to it</string>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>Ambient needs screen recording access to see your screen and help you.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Ambient uses speech recognition to transcribe your voice when you talk to it</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.jabir.ambient.ask</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>ambient</string>
+			</array>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+		</dict>
+	</array>
 </dict>
 </plist>

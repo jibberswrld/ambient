@@ -7,7 +7,6 @@
 //  opens a floating panel with companion voice controls.
 //
 
-import ServiceManagement
 import SwiftUI
 
 @main
@@ -29,7 +28,8 @@ struct AmbientApp: App {
 @MainActor
 final class CompanionAppDelegate: NSObject, NSApplicationDelegate {
     private var menuBarPanelManager: MenuBarPanelManager?
-    private let companionManager = CompanionManager()
+    private var runtime: AmbientRuntime?
+    private var companionManager: CompanionManager?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         print("🎯 Ambient: Starting...")
@@ -38,6 +38,19 @@ final class CompanionAppDelegate: NSObject, NSApplicationDelegate {
         UserDefaults.standard.register(defaults: ["NSInitialToolTipDelay": 0])
 
 
+        let runtime: AmbientRuntime
+        do { runtime = try AmbientRuntime() }
+        catch {
+            let alert = NSAlert()
+            alert.messageText = "Ambient could not start"
+            alert.informativeText = error.localizedDescription
+            alert.runModal()
+            NSApp.terminate(nil)
+            return
+        }
+        self.runtime = runtime
+        let companionManager = CompanionManager(runtime: runtime)
+        self.companionManager = companionManager
         menuBarPanelManager = MenuBarPanelManager(companionManager: companionManager)
         companionManager.start()
         // Auto-open the panel if the user still needs to do something:
@@ -45,26 +58,27 @@ final class CompanionAppDelegate: NSObject, NSApplicationDelegate {
         if !companionManager.hasCompletedOnboarding || !companionManager.allPermissionsGranted {
             menuBarPanelManager?.showPanelOnLaunch()
         }
-        registerAsLoginItemIfNeeded()
+        runtime.start()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        companionManager.stop()
+        NSLog("Ambient application terminating")
+        companionManager?.stop()
     }
 
-    /// Registers the app as a login item so it launches automatically on
-    /// startup. Uses SMAppService which shows the app in System Settings >
-    /// General > Login Items, letting the user toggle it off if they want.
-    private func registerAsLoginItemIfNeeded() {
-        let loginItemService = SMAppService.mainApp
-        if loginItemService.status != .enabled {
-            do {
-                try loginItemService.register()
-                print("🎯 Ambient: Registered as login item")
-            } catch {
-                print("⚠️ Ambient: Failed to register as login item: \(error)")
-            }
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            guard let text = Self.automationText(from: url) else { continue }
+            companionManager?.buddyDictationManager.cancelCurrentDictation()
+            runtime?.submit(text: text)
         }
     }
 
+    static func automationText(from url: URL) -> String? {
+        guard url.scheme?.lowercased() == "ambient", url.host == "ask",
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let text = components.queryItems?.first(where: { $0.name == "text" })?.value,
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return text
+    }
 }
