@@ -4,51 +4,28 @@
 
 Ambient is a macOS menu bar app forked from [Clicky](https://github.com/farzaa/clicky) under the MIT license. Preserve the original copyright in `LICENSE` alongside Ambient's copyright.
 
-The current shell retains Clicky's voice and cursor interface. It has no Dock icon or main window (`LSUIElement=true`). Clicking the status item opens a custom floating control panel. Control+Option captures voice through the inherited transcription layer; a transcript and screenshots go to Claude, and ElevenLabs speaks its response. A transparent cursor overlay can point at elements on connected displays.
+The app target links the local `Packages/AmbientKit` library. Its pipeline is Control+Option → temporary PCM WAV → `PublikSpeechClient.transcribe` → `AmbientAgentSession` with tools → memory learning and optional publik speech playback. The inherited vendor clients, Cloudflare Worker endpoints and pointing-tag parser have been removed.
 
-`Packages/AmbientKit` is separate work in progress and is **not linked to the app target**. Do not describe its planned functionality as available in the app. Analytics, the email collection gate, feedback links, and automatic updates have been removed.
+The existing menu panel and cursor overlay remain temporary surfaces. Do not import `AmbientUI` or claim the replacement flow bar/settings/onboarding is integrated.
 
 ## Architecture
 
-- SwiftUI with AppKit bridging (`NSStatusItem`, borderless `NSPanel`, `NSHostingView`).
-- MVVM-style state via `@StateObject`, `@ObservedObject`, and `@Published`; `@MainActor` with async/await.
-- Claude streaming SSE chat and ElevenLabs TTS use an inherited Cloudflare Worker proxy URL. AssemblyAI gets temporary websocket tokens from that proxy; OpenAI and Apple Speech fallback providers remain.
-- Proxy URLs are placeholders. This checkout does not include the Worker implementation or live credentials, so voice/AI responses are not configured by the shell build.
-- ScreenCaptureKit requires macOS 14.2+. Screenshots are labeled per monitor. Claude's `[POINT:x,y:label:screenN]` tags map screenshot coordinates into the appropriate display and animate the cursor along a bezier path.
-- Global push-to-talk uses a listen-only `CGEvent` tap, rather than an AppKit global keyboard monitor, for reliable modifier detection in the background.
-- AssemblyAI shares one long-lived `URLSession` across streaming sessions. Do not replace it with per-session invalidation; that can corrupt the connection pool on rapid reconnects.
-- The custom menu panel is non-activating and dismisses on outside clicks. The cursor overlay joins all Spaces and does not steal focus. When its persisted visibility preference is disabled, it appears transiently during interactions and fades after inactivity.
-- The inherited app delegate registers the app as a login item with `SMAppService`; the user can disable it in System Settings.
+- `AmbientRuntime` is the sole composition root, owning the credential source, session, completion/speech clients, background manager, memory/skill stores, connector and tool providers. Its settings-facing stores/services use contract protocol types.
+- `AmbientRuntimeState` is the single observable conversation state: idle, listening(audioLevel), transcribing, thinking, working(activityLabel), responding(text), finished(finalText), failed(AgentFailure). The old `CompanionManager` maps it onto inherited overlay/panel presentation, without a second agent pipeline.
+- `AmbientInteraction` is the main-actor approval/authorization seam. Its optional handlers can be connected to the new interface later; today's defaults are NSAlert approval sheets and NSWorkspace browser authorization. It also implements the plain `PublikGateUI` window.
+- `Publik.ensureSignedIn` runs at launch. There is no bundled app token yet. Development uses `PUBLIK_API_KEY`; missing setup is explicit. Never persist development overrides. The launch script forwards `PUBLIK_API_KEY`, `PUBLIK_API_BASE_URL`, `AMBIENT_CONNECTOR_ORIGIN` through LaunchServices.
+- `AmbientScreenToolProvider` supplies optional `look_at_screen` and `point_at` tools. No screenshots accompany ordinary requests. Captures exclude Ambient windows and use a bounded JPEG budget. Pointing maps 1-based display indices and latest-capture pixel coordinates (top-left origin) to AppKit screen coordinates.
+- `BuddyDictationManager` records 16 kHz mono PCM WAV and live levels, up to 90 seconds. It removes its own temporary recording after completion/cancellation. There is no Apple Speech partial transcription.
+- A new push-to-talk press or text submission cancels the turn and stops playback. `ambient.spokenRepliesEnabled` defaults to true. Successful turns enqueue `MemoryStore.learn` even with speech off.
+- Background task completions are logged, published as `latestBackgroundCompletion`, and available as independent `backgroundCompletions()` streams. Agent processes are headless; no Terminal/Codex window is opened.
+- `Packages/AmbientKit/Sources/AmbientContracts/Contracts.swift` is the subsystem agreement. Each subsystem depends only on that target. The app imports AmbientAgent, AmbientBackground, AmbientConnectors, AmbientMemory and AmbientContracts.
+- `connector/` contains the undeployed TypeScript service. Local default: `http://127.0.0.1:3019`. Its Composio key exists only in the service environment. Tool Router owns discovery, schemas, authorization and execution; do not add per-app adapters/catalogs. Read its README before changing it.
+- Stores live under `~/Library/Application Support/Ambient/`. Never overwrite corrupt store files with empty data. The runtime reports initialization failures.
+- `ambient://ask?text=...` is the permanent URL automation hook, routed through the same agent path and approvals. Before sign-in, the latest request is queued. Debug-only `--transcribe-wav` exercises the actual transcription path without a microphone.
+- `NSLog` records local state, tool names, speech synthesis/playback and final background statuses. These logs contain conversation text; do not add credentials or raw tool payloads.
+- The global listen-only CGEvent tap, non-activating panel and multi-display overlay remain. The inherited intro video has no automatic screen/model demo. Automatic login-item registration was removed.
 
-## Key Files
-
-All app sources are in `Ambient/`:
-
-| File | Responsibility |
-|------|----------------|
-| `AmbientApp.swift` | `@main AmbientApp`, empty Settings scene, `CompanionAppDelegate`, panel and voice lifecycle, login-item registration. |
-| `CompanionManager.swift` | Central voice state machine, permissions, onboarding, model choice, conversation history, capture → Claude → speech → pointing coordination. |
-| `MenuBarPanelManager.swift` | Status item and custom floating panel lifecycle, positioning and dismissal. |
-| `CompanionPanelView.swift` | Status, permission controls, Start, model picker, replay and Quit UI. |
-| `OverlayWindow.swift` | Transparent multi-display cursor panels, welcome bubble, response display, waveform and pointing animations. |
-| `CompanionResponseOverlay.swift` | Response text bubble and waveform view. |
-| `CompanionScreenCaptureUtility.swift` | Multi-monitor ScreenCaptureKit screenshots. |
-| `BuddyDictationManager.swift` | AVAudioEngine capture, permission checks, keyboard/button dictation and transcript finalization. |
-| `BuddyTranscriptionProvider.swift` | Provider protocol and factory; `VoiceTranscriptionProvider` in Info.plist selects AssemblyAI, OpenAI or Apple Speech. |
-| `AssemblyAIStreamingTranscriptionProvider.swift` | Temporary token request, AssemblyAI v3 PCM16 websocket streaming and turn finalization. |
-| `OpenAIAudioTranscriptionProvider.swift` | Buffers audio and uploads a WAV on release. |
-| `AppleSpeechTranscriptionProvider.swift` | Apple Speech fallback. |
-| `BuddyAudioConversionSupport.swift` | PCM16 conversion and WAV construction. |
-| `GlobalPushToTalkShortcutMonitor.swift` | System-wide listen-only CGEvent tap. |
-| `ClaudeAPI.swift`, `OpenAIAPI.swift` | Inherited vision chat clients. |
-| `ElevenLabsTTSClient.swift` | Proxy TTS request, AVAudioPlayer playback and playback state. |
-| `ElementLocationDetector.swift` | Screenshot element location detection. |
-| `DesignSystem.swift` | Existing design tokens and shared view styles. |
-| `WindowPositionManager.swift` | Window placement and screen recording/accessibility permission helpers. |
-| `AppBundleConfiguration.swift` | Bundle Info.plist configuration reader. |
-| `Info.plist`, `Ambient.entitlements` | Menu-only behavior, transcription selection, permission descriptions and entitlements. |
-
-`AmbientTests/` contains permission-routing unit tests; `AmbientUITests/` contains inherited launch/UI smoke tests.
+`AmbientTests/` covers permission routing and URL decoding; `AmbientUITests/` retains inherited launch smoke tests. Run package and app tests after integration changes, and launch/interact with the signed app to verify actual behavior.
 
 ## Build & Run
 
@@ -56,7 +33,7 @@ All app sources are in `Ambient/`:
 ./scripts/run.sh
 ```
 
-Build with `scripts/run.sh`. It uses the shared `Ambient` scheme in `Ambient.xcodeproj`, Debug configuration, team `Z63L6KDQ9K`, and a local **Apple Development** signing identity. Derived data always goes to `build/`; the app is `build/Build/Products/Debug/Ambient.app`. After a successful signed build it quits the running Ambient process and launches the new app. It rejects an ad-hoc or wrong-team signature.
+Build with `scripts/run.sh`. It uses the shared `Ambient` scheme in `Ambient.xcodeproj`, Debug configuration, team `Z63L6KDQ9K`, and a local **Apple Development** signing identity. Derived data always goes to `build/`; the app is `build/Build/Products/Debug/Ambient.app`. After a successful signed build it quits only this worktree’s running Ambient executable and launches the new app. It rejects an ad-hoc or wrong-team signature.
 
 Use the same certificate/team, bundle ID (`com.jabir.ambient`) and app path between builds so macOS privacy grants can remain valid. Verify with `codesign -dv --verbose=4 build/Build/Products/Debug/Ambient.app`: it must report `TeamIdentifier=Z63L6KDQ9K` and an Apple Development authority. First use still needs microphone, accessibility and screen recording/content grants. Signing changes or OS policy may require granting access again.
 
