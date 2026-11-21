@@ -14,7 +14,7 @@ public protocol PublikGateUI: Sendable {
 
 public enum Publik {
     public static let appSlug = "ambient"
-    public static let appVersion = "0.1.0"
+    public static let appVersion = "0.1.1"
     /// false: the app calls no model. It still signs in and counts users; it skips the plan screen.
     public static let usesAI = true
     public static let origin = ProcessInfo.processInfo.environment["PUBLIK_ORIGIN"] ?? "https://publikhq.com" // PUBLIK_ORIGIN: tests only

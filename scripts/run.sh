@@ -50,5 +50,6 @@ for environment_name in PUBLIK_API_KEY PUBLIK_API_BASE_URL AMBIENT_CONNECTOR_ORI
         launch_options+=(--env "$environment_name=${!environment_name}")
     fi
 done
-open -n "${launch_options[@]}" --stdout "$derived_data_path/app-stdout.log" --stderr "$derived_data_path/app-stderr.log" "$app_path" --args "$@"
+# The ${array[@]+...} form keeps macOS's bash 3.2 from treating an empty array as unset.
+open -n ${launch_options[@]+"${launch_options[@]}"} --stdout "$derived_data_path/app-stdout.log" --stderr "$derived_data_path/app-stderr.log" "$app_path" --args "$@"
 echo "Launched $app_path"
