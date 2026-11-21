@@ -90,7 +90,7 @@ public struct PublikAIClient: TextCompletionService, Sendable {
         return text
     }
 
-    func chatBody(messages: [ChatMessage], tools: [ToolDefinition], tier: ModelTier, streaming: Bool) throws -> Data {
+    func chatBody(messages: [ChatMessage], tools: [ToolDefinition], tier: ModelTier, reasoningEffort: String? = nil, streaming: Bool) throws -> Data {
         struct Request: Encodable {
             struct Tool: Encodable {
                 struct Function: Encodable {
@@ -105,10 +105,11 @@ public struct PublikAIClient: TextCompletionService, Sendable {
             var messages: [ChatMessage]
             var stream: Bool
             var tools: [Tool]?
+            var reasoning_effort: String?
         }
         return try JSONEncoder().encode(Request(model: tier.rawValue, messages: messages, stream: streaming, tools: tools.isEmpty ? nil : tools.map {
             Request.Tool(function: .init(name: $0.name, description: $0.description, parameters: $0.parametersJSONSchema))
-        }))
+        }, reasoning_effort: reasoningEffort))
     }
 
     func request(path: String, body: Data, contentType: String) async throws -> URLRequest {

@@ -108,10 +108,12 @@ final class AmbientRuntime {
         let webSearch = PublikWebSearchProvider(credentialSource: credentialSource)
         let connectors = ComposioToolProvider(client: connectorClient) { url in await interaction.authorize(url) }
         let memoryTools = MemoryToolProvider(store: memoryStore), skillTools = SkillToolProvider(store: skillStore)
-        // A background agent is a second conversation with the same tools, minus the screen and spawning.
-        let ambientAgent: BackgroundTaskManager.InProcessAgent = { prompt, reportActivity in
+        // A background agent is a second conversation on the person's publik account: the same tools minus the
+        // screen and spawning, plus a shell confined to its working directory, and more reasoning than the bar.
+        let ambientAgent: BackgroundTaskManager.InProcessAgent = { prompt, workingDirectory, reportActivity in
             let session = AmbientAgentSession(credentialSource: credentialSource,
-                toolProviders: [webSearch, connectors, memoryTools, skillTools], baseSystemPrompt: ambientBackgroundAgentPrompt)
+                toolProviders: [AgentWorkspaceToolProvider(workingDirectory: workingDirectory), webSearch, connectors, memoryTools, skillTools],
+                baseSystemPrompt: ambientBackgroundAgentPrompt, reasoningEffort: "high")
             for await event in session.send(UserTurn(text: prompt)) {
                 switch event {
                 case .toolStarted(_, _, let activityLabel): reportActivity(activityLabel)
@@ -122,13 +124,14 @@ final class AmbientRuntime {
             }
             throw CancellationError()
         }
+        // The bar answers and acts with as little deliberation as the model allows; agents do the thinking.
         agentSession = AmbientAgentSession(credentialSource: credentialSource, toolProviders: [
             webSearch,
             BackgroundToolProvider(manager: taskManager, approvalSettings: approvalSettings, ambientAgent: ambientAgent) { title, detail in
                 await interaction.approve(title: title, detail: detail)
             },
             connectors, memoryTools, skillTools, screenTools
-        ])
+        ], reasoningEffort: "low")
     }
 
     func start() {
@@ -185,7 +188,15 @@ final class AmbientRuntime {
 
     func submit(recordedWAV: Data) {
         startTurn { [speechClient] in
-            try await speechClient.transcribe(wavData: recordedWAV)
+            // On-device recognition answers in a fraction of the time and keeps the audio on this Mac.
+            let started = Date()
+            if let text = await AmbientLocalTranscriber.transcribe(wavData: recordedWAV) {
+                NSLog("Ambient transcribed on this Mac in %.2f s", Date().timeIntervalSince(started))
+                return text
+            }
+            let text = try await speechClient.transcribe(wavData: recordedWAV)
+            NSLog("Ambient transcribed with publik in %.2f s", Date().timeIntervalSince(started))
+            return text
         }
     }
 
@@ -213,6 +224,7 @@ final class AmbientRuntime {
                 let userText = try await transcription().trimmingCharacters(in: .whitespacesAndNewlines)
                 try Task.checkCancellation()
                 guard !userText.isEmpty else { state.transition(to: .idle); return }
+                NSLog("Ambient heard: %@", userText)
                 state.begin(userText: userText)
                 state.transition(to: .thinking)
                 var accumulatedText = ""

@@ -103,7 +103,7 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
             guard let self, let model else { return false }
             self.showBar()
             let kind: FlowBarApprovalRequest.Kind = title == "Run shell command?" ? .shellCommand
-                : (["Start Codex agent?", "Start Claude agent?", "Start Ambient agent?", "Continue agent?"].contains(title) ? .backgroundAgent : .other)
+                : (["Start Codex agent?", "Start Claude agent?", "Start agent?", "Continue agent?"].contains(title) ? .backgroundAgent : .other)
             NSLog("Ambient approval presented: %@", title)
             let allowed = await model.requestApproval(FlowBarApprovalRequest(title: title, detail: detail, kind: kind))
             NSLog("Ambient approval answered: %@", String(allowed))

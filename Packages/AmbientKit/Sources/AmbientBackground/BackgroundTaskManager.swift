@@ -111,11 +111,12 @@ public actor BackgroundTaskManager: BackgroundTaskStore {
     }
 
     /// An agent that runs inside Ambient instead of a CLI. `run` reports what it is doing and returns its final answer.
-    public typealias InProcessAgent = @Sendable (_ prompt: String, _ reportActivity: @escaping @Sendable (String) -> Void) async throws -> String
+    public typealias InProcessAgent = @Sendable (_ prompt: String, _ workingDirectory: URL, _ reportActivity: @escaping @Sendable (String) -> Void) async throws -> String
 
     @discardableResult
-    public func spawnInProcessAgent(prompt: String, title: String, run: @escaping InProcessAgent) throws -> BackgroundTask {
-        let record = PersistedBackgroundTask(kind: .ambientAgent, title: title, directory: workspaceDirectory.path)
+    public func spawnInProcessAgent(prompt: String, workingDirectory: String? = nil, title: String, run: @escaping InProcessAgent) throws -> BackgroundTask {
+        let directory = try prepareDirectory(workingDirectory)
+        let record = PersistedBackgroundTask(kind: .ambientAgent, title: title, directory: directory.path)
         let taskID = record.id
         records[taskID] = record
         try appendTranscript("\nUser: \(prompt)\n", taskID: taskID)
@@ -123,7 +124,7 @@ public actor BackgroundTaskManager: BackgroundTaskStore {
         inProcessAgents[taskID] = Task { [weak self] in
             let outcome: Result<String, Error>
             do {
-                outcome = .success(try await run(prompt) { [weak self] activity in Task { await self?.recordActivity(activity, taskID: taskID) } })
+                outcome = .success(try await run(prompt, directory) { [weak self] activity in Task { await self?.recordActivity(activity, taskID: taskID) } })
             } catch { outcome = .failure(error) }
             await self?.finishInProcessAgent(taskID: taskID, outcome: outcome)
         }

@@ -6,6 +6,8 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Ambient uses your microphone so you can talk to it</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Ambient turns what you say into text on this Mac, so it can answer faster.</string>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>Ambient needs screen recording access to see your screen and help you.</string>
 	<key>CFBundleURLTypes</key>

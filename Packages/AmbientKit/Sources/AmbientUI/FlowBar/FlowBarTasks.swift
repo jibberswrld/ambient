@@ -22,7 +22,7 @@ extension AmbientBackgroundTask.Kind {
         case .codexAgent: return "Codex"
         case .claudeAgent: return "Claude Code"
         case .shellCommand: return "Command"
-        case .ambientAgent: return "Ambient"
+        case .ambientAgent: return "Agent"
         }
     }
 }
