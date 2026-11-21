@@ -105,13 +105,29 @@ final class AmbientRuntime {
         self.connectorService = connectorClient
         self.approvalSettings = approvalSettings
         speechClient = PublikSpeechClient(credentialSource: credentialSource)
+        let webSearch = PublikWebSearchProvider(credentialSource: credentialSource)
+        let connectors = ComposioToolProvider(client: connectorClient) { url in await interaction.authorize(url) }
+        let memoryTools = MemoryToolProvider(store: memoryStore), skillTools = SkillToolProvider(store: skillStore)
+        // A background agent is a second conversation with the same tools, minus the screen and spawning.
+        let ambientAgent: BackgroundTaskManager.InProcessAgent = { prompt, reportActivity in
+            let session = AmbientAgentSession(credentialSource: credentialSource,
+                toolProviders: [webSearch, connectors, memoryTools, skillTools], baseSystemPrompt: ambientBackgroundAgentPrompt)
+            for await event in session.send(UserTurn(text: prompt)) {
+                switch event {
+                case .toolStarted(_, _, let activityLabel): reportActivity(activityLabel)
+                case .finished(let finalText): return finalText
+                case .failed(let failure): throw failure
+                case .textDelta, .toolFinished: break
+                }
+            }
+            throw CancellationError()
+        }
         agentSession = AmbientAgentSession(credentialSource: credentialSource, toolProviders: [
-            PublikWebSearchProvider(credentialSource: credentialSource),
-            BackgroundToolProvider(manager: taskManager, approvalSettings: approvalSettings) { title, detail in
+            webSearch,
+            BackgroundToolProvider(manager: taskManager, approvalSettings: approvalSettings, ambientAgent: ambientAgent) { title, detail in
                 await interaction.approve(title: title, detail: detail)
             },
-            ComposioToolProvider(client: connectorClient) { url in await interaction.authorize(url) },
-            MemoryToolProvider(store: memoryStore), SkillToolProvider(store: skillStore), screenTools
+            connectors, memoryTools, skillTools, screenTools
         ])
     }
 
@@ -200,6 +216,10 @@ final class AmbientRuntime {
                 state.begin(userText: userText)
                 state.transition(to: .thinking)
                 var accumulatedText = ""
+                // Speech starts with the first finished sentence instead of waiting for the whole reply.
+                let speech = spokenRepliesEnabled ? startSpeaking(identifier: identifier) : nil
+                defer { speech?.sentences.finish() }
+                var unspokenText = ""
                 var activities: [(identifier: String, label: String)] = []
                 for await event in agentSession.send(UserTurn(text: userText)) {
                     guard isCurrent(identifier) else { return }
@@ -209,6 +229,10 @@ final class AmbientRuntime {
                         guard !fragment.isEmpty else { continue }
                         accumulatedText += fragment
                         state.transition(to: .responding(text: accumulatedText))
+                        if let speech {
+                            unspokenText += fragment
+                            while let sentence = Self.takeSentence(from: &unspokenText) { speech.sentences.yield(sentence) }
+                        }
                     case .toolStarted(let callID, let toolName, let activityLabel):
                         activities.append((callID, activityLabel))
                         NSLog("Ambient tool started: %@", toolName)
@@ -220,9 +244,13 @@ final class AmbientRuntime {
                         else { state.transition(to: .thinking) }
                     case .finished(let finalText):
                         state.transition(to: .finished(finalText: finalText))
-                        await memoryStore.learn(fromUserText: userText, assistantText: finalText)
-                        guard isCurrent(identifier), spokenRepliesEnabled else { return }
-                        try await speak(finalText, identifier: identifier)
+                        // Learning is a separate model call; it must not delay the reply or its speech.
+                        Task { [memoryStore] in await memoryStore.learn(fromUserText: userText, assistantText: finalText) }
+                        if let speech {
+                            speech.sentences.yield(unspokenText)
+                            speech.sentences.finish()
+                            try await speech.playback.value
+                        }
                     case .failed(let failure): state.transition(to: .failed(failure))
                     }
                 }
@@ -233,27 +261,54 @@ final class AmbientRuntime {
         }
     }
 
-    private func speak(_ text: String, identifier: UUID) async throws {
-        // publik limits one speech call to 4096 characters. Speak longer replies in order.
-        var remainder = text[...]
-        while !remainder.isEmpty {
-            let end = remainder.index(remainder.startIndex, offsetBy: min(remainder.count, 4096))
-            let chunk = String(remainder[..<end])
-            remainder = remainder[end...]
-            let audio = try await speechClient.synthesize(text: chunk)
-            guard isCurrent(identifier), spokenRepliesEnabled else { return }
-            NSLog("Ambient speech synthesis succeeded: %ld bytes", audio.count)
-            let player = try AVAudioPlayer(data: audio)
-            playback = player
-            guard player.prepareToPlay(), player.play() else {
-                throw AgentFailure.other(message: "The spoken reply could not start playing.")
+    /// The first complete sentence of `text`, removed from it. A sentence ends at ". ", "! ", "? " or a line break.
+    static func takeSentence(from text: inout String) -> String? {
+        var previous: Character?
+        for index in text.indices {
+            let character = text[index]
+            if character.isNewline || (character == " " && previous.map { ".!?".contains($0) } == true) {
+                let sentence = String(text[..<index])
+                text = String(text[text.index(after: index)...])
+                return sentence
             }
-            NSLog("Ambient speech playback started")
-            while player.isPlaying {
-                try await Task.sleep(for: .milliseconds(50))
+            previous = character
+        }
+        return nil
+    }
+
+    /// Synthesis of each sentence starts as soon as it arrives; playback keeps them in order.
+    private func startSpeaking(identifier: UUID) -> (sentences: AsyncStream<String>.Continuation, playback: Task<Void, Error>) {
+        let (sentences, continuation) = AsyncStream<String>.makeStream()
+        let (clips, clipContinuation) = AsyncStream<Task<Data, Error>>.makeStream()
+        Task { [speechClient] in
+            for await sentence in sentences {
+                // publik limits one speech call to 4096 characters.
+                var remainder = sentence.trimmingCharacters(in: .whitespacesAndNewlines)[...]
+                while !remainder.isEmpty {
+                    let chunk = String(remainder.prefix(4096))
+                    remainder = remainder.dropFirst(4096)
+                    clipContinuation.yield(Task { try await speechClient.synthesize(text: chunk) })
+                }
+            }
+            clipContinuation.finish()
+        }
+        let playback = Task {
+            for await clip in clips {
+                let audio = try await clip.value
                 guard isCurrent(identifier), spokenRepliesEnabled else { return }
+                let player = try AVAudioPlayer(data: audio)
+                self.playback = player
+                guard player.prepareToPlay(), player.play() else {
+                    throw AgentFailure.other(message: "The spoken reply could not start playing.")
+                }
+                NSLog("Ambient speech playback started")
+                while player.isPlaying {
+                    try await Task.sleep(for: .milliseconds(30))
+                    guard isCurrent(identifier), spokenRepliesEnabled else { return }
+                }
             }
         }
+        return (continuation, playback)
     }
 
     private func isCurrent(_ identifier: UUID) -> Bool { identifier == turnIdentifier && !Task.isCancelled }

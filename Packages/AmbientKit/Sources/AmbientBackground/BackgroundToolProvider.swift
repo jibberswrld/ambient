@@ -18,29 +18,37 @@ public struct BackgroundToolProvider: ToolProvider {
     public let manager: BackgroundTaskManager
     public let approvalSettings: BackgroundApprovalSettings
     private let approval: Approval
+    private let ambientAgent: BackgroundTaskManager.InProcessAgent?
 
+    /// `ambientAgent` runs one background agent that has Ambient's own tools. Nil leaves only the coding agents.
     public init(manager: BackgroundTaskManager, approvalSettings: BackgroundApprovalSettings = BackgroundApprovalSettings(),
-                approval: @escaping Approval) {
+                ambientAgent: BackgroundTaskManager.InProcessAgent? = nil, approval: @escaping Approval) {
         self.manager = manager
         self.approvalSettings = approvalSettings
+        self.ambientAgent = ambientAgent
         self.approval = approval
     }
 
     public func tools() async -> [any AmbientTool] {
         BackgroundToolOperation.allCases.map {
-            BackgroundTool(operation: $0, manager: manager, settings: approvalSettings, approval: approval)
+            BackgroundTool(operation: $0, manager: manager, settings: approvalSettings, approval: approval, ambientAgent: ambientAgent)
         }
     }
 
     public func systemPromptSection() async -> String? {
         """
-        Work without interrupting the person's desktop. Use spawn_agent for multi-step coding, investigation,
-        and changes needing an agent's judgment. Brief it with the goal, relevant context and files, the chosen
-        working directory, constraints, and a concrete definition of done. Choose codex or claude; leave model
-        omitted unless the person specifies one. Use run_shell_command for a specific known command; set
+        Work without interrupting the person's desktop. Use spawn_agent for any multi-step job that can run
+        while the person does something else; start several at once when the jobs are independent. Choose the
+        kind by the work: codex or claude for coding, files, and commands on this Mac; ambient for everything
+        else, such as research, web lookups, and work in the person's connected apps (mail, calendar, documents,
+        chat). An ambient agent has web search, the app connections, memory, and skills, and no access to files
+        or the screen. Brief every agent with the goal, relevant context, constraints, and a concrete definition
+        of done; it knows nothing of this conversation. Leave model omitted unless the person specifies one.
+        Use run_shell_command for a specific known command; set
         run_in_background for lengthy work. Foreground commands time out after 30 seconds and output is capped
-        at 256 KiB. Agents and background commands continue after your reply. Report the task id, then use
-        list_background_tasks and get_task_result to check progress and retrieve results later. continue_agent
+        at 256 KiB. Agents and background commands continue after your reply. After starting one, say in a few
+        words that it is running and stop; never read a task id aloud, and do not wait or poll for it in the
+        same turn. Use list_background_tasks and get_task_result when the person asks about progress or results. continue_agent
         resumes a finished agent in its original directory and conversation. Agents run without a terminal or
         a window, with noninteractive approvals: Codex is confined to its workspace; Claude auto-accepts edits
         and denies anything that would need another permission prompt. Report permission failures honestly.
@@ -61,7 +69,7 @@ private enum BackgroundToolOperation: String, CaseIterable, Sendable {
 
     var description: String {
         switch self {
-        case .spawnAgent: return "Start a headless coding agent and return its task id immediately. No window opens."
+        case .spawnAgent: return "Start a background agent and return its task id immediately. No window opens. kind codex or claude: a coding agent on this Mac. kind ambient: a general agent with web search and the person's connected apps."
         case .continueAgent: return "Resume a finished coding agent with a follow-up message. Returns the same task id immediately."
         case .list: return "List background tasks, newest first, with status and latest activity."
         case .result: return "Get task status, latest activity, final result, and the last 8,000 characters of its readable transcript."
@@ -81,9 +89,9 @@ private enum BackgroundToolOperation: String, CaseIterable, Sendable {
         let activation = JSONValue.object(["type": .string("boolean"), "default": .bool(false), "description": .string("Bring the destination to the front only when the person explicitly asked to see it.")])
         switch self {
         case .spawnAgent:
-            return ["kind": .object(["type": .string("string"), "enum": .array([.string("codex"), .string("claude")])]),
+            return ["kind": .object(["type": .string("string"), "enum": .array([.string("codex"), .string("claude"), .string("ambient")])]),
                     "prompt": string("Goal, context, constraints, and definition of done for the agent."),
-                    "title": string("Short readable task title."), "working_directory": directory,
+                    "title": string("Short readable task title."), "working_directory": string("Coding agents only. Existing absolute working directory. Omit for a new private Ambient workspace."),
                     "model": string("Optional model explicitly requested by the person; otherwise the CLI default applies.")]
         case .continueAgent: return ["task_id": taskID, "message": string("Follow-up instructions for the original agent session.")]
         case .result, .cancel: return ["task_id": taskID]
@@ -135,6 +143,7 @@ private struct BackgroundTool: AmbientTool {
     let manager: BackgroundTaskManager
     let settings: BackgroundApprovalSettings
     let approval: BackgroundToolProvider.Approval
+    let ambientAgent: BackgroundTaskManager.InProcessAgent?
 
     var definition: ToolDefinition {
         ToolDefinition(name: operation.rawValue, description: operation.description, parametersJSONSchema: .object([
@@ -150,8 +159,13 @@ private struct BackgroundTool: AmbientTool {
             switch operation {
             case .spawnAgent:
                 let kindName = try text("kind", arguments)
-                guard kindName == "codex" || kindName == "claude" else { throw BackgroundExecutionError.message("kind must be codex or claude.") }
                 let prompt = try text("prompt", arguments)
+                if kindName == "ambient" {
+                    guard let ambientAgent else { throw BackgroundExecutionError.message("Ambient agents are not available. Choose codex or claude.") }
+                    guard await approved("Start Ambient agent?", detail: prompt) else { return denied() }
+                    return taskResult(try await manager.spawnInProcessAgent(prompt: prompt, title: try text("title", arguments), run: ambientAgent))
+                }
+                guard kindName == "codex" || kindName == "claude" else { throw BackgroundExecutionError.message("kind must be codex, claude, or ambient.") }
                 guard await approved("Start \(kindName == "codex" ? "Codex" : "Claude") agent?", detail: "\(prompt)\nDirectory: \(arguments["working_directory"]?.stringValue ?? "new Ambient workspace")") else { return denied() }
                 return taskResult(try await manager.spawnAgent(kind: kindName == "codex" ? .codexAgent : .claudeAgent,
                     prompt: prompt, workingDirectory: arguments["working_directory"]?.stringValue,

@@ -163,7 +163,7 @@ public protocol AICredentialSource: Sendable {
 // MARK: - Background tasks (agents and commands that run without a window)
 
 public struct BackgroundTask: Identifiable, Sendable, Equatable {
-    public enum Kind: String, Sendable, Codable { case codexAgent, claudeAgent, shellCommand }
+    public enum Kind: String, Sendable, Codable { case codexAgent, claudeAgent, shellCommand, ambientAgent }
     public enum Status: String, Sendable, Codable { case running, succeeded, failed, cancelled }
     public var id: UUID
     public var kind: Kind

@@ -85,7 +85,7 @@ enum DemoSampleData {
             Created Sources/Settings/ConnectorsPage.swift
             Editing SettingsView.swift
             """
-        case .claudeAgent:
+        case .claudeAgent, .ambientAgent:
             return """
             > Summarise the launch thread in Gmail.
 

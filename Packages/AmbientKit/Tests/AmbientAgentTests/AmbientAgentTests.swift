@@ -279,7 +279,7 @@ final class AmbientAgentTests: XCTestCase {
                 return .init(chunks: [wav])
             }
             XCTAssertTrue(request.value(forHTTPHeaderField: "Content-Type")?.hasPrefix("multipart/form-data; boundary=") == true)
-            let body = requestData(request); XCTAssertNotNil(body.range(of: wav)); XCTAssertTrue(String(decoding: body, as: UTF8.self).contains("whisper-1"))
+            let body = requestData(request); XCTAssertNotNil(body.range(of: wav)); XCTAssertTrue(String(decoding: body, as: UTF8.self).contains("gpt-4o-mini-transcribe"))
             return .init(chunks: [Data("{\"text\":\"Ambient ready\"}".utf8)])
         }
         let search = PublikWebSearchProvider(credentialSource: FixedCredentialSource(), urlSession: urlSession), tools = await search.tools()

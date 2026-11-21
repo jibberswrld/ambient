@@ -33,7 +33,7 @@ public struct PublikSpeechClient: Sendable {
         let boundary = "Ambient-\(UUID().uuidString)"
         var body = Data()
         func append(_ text: String) { body.append(Data(text.utf8)) }
-        append("--\(boundary)\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\nwhisper-1\r\n")
+        append("--\(boundary)\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\ngpt-4o-mini-transcribe\r\n")
         append("--\(boundary)\r\nContent-Disposition: form-data; name=\"response_format\"\r\n\r\njson\r\n")
         append("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"recording.wav\"\r\nContent-Type: audio/wav\r\n\r\n")
         body.append(wavData)

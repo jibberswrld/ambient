@@ -103,7 +103,7 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
             guard let self, let model else { return false }
             self.showBar()
             let kind: FlowBarApprovalRequest.Kind = title == "Run shell command?" ? .shellCommand
-                : (["Start Codex agent?", "Start Claude agent?", "Continue agent?"].contains(title) ? .backgroundAgent : .other)
+                : (["Start Codex agent?", "Start Claude agent?", "Start Ambient agent?", "Continue agent?"].contains(title) ? .backgroundAgent : .other)
             NSLog("Ambient approval presented: %@", title)
             let allowed = await model.requestApproval(FlowBarApprovalRequest(title: title, detail: detail, kind: kind))
             NSLog("Ambient approval answered: %@", String(allowed))
@@ -127,6 +127,9 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
         }
         runtime.screenTools.pointHandler = { [weak self] location, frame, label in
             self?.pointerController.show(at: location, displayFrame: frame, label: label)
+        }
+        runtime.screenTools.drawHandler = { [weak self] annotations, frame in
+            self?.pointerController.show(annotations: annotations, displayFrame: frame)
         }
         dictationManager.audioLevelChanged = { [weak runtime] in runtime?.updateAudioLevel($0) }
         dictationManager.recordingFinished = { [weak runtime] in runtime?.submit(recordedWAV: $0) }
@@ -344,6 +347,7 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
 
     private func submit(text: String) {
         dictationManager.cancelCurrentDictation()
+        pointerController.hide()
         runtime?.submit(text: text)
     }
 

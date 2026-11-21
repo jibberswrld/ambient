@@ -14,6 +14,7 @@ public actor BackgroundTaskManager: BackgroundTaskStore {
     private let workspaceDirectory: URL
     private var records: [UUID: PersistedBackgroundTask] = [:]
     private var processes: [UUID: HeadlessProcess] = [:]
+    private var inProcessAgents: [UUID: Task<Void, Never>] = [:]
     private var listContinuations: [UUID: AsyncStream<[BackgroundTask]>.Continuation] = [:]
     private var completionContinuations: [UUID: AsyncStream<BackgroundTask>.Continuation] = [:]
 
@@ -41,6 +42,7 @@ public actor BackgroundTaskManager: BackgroundTaskStore {
 
     deinit {
         for process in processes.values { process.terminate() }
+        for agent in inProcessAgents.values { agent.cancel() }
         for continuation in listContinuations.values { continuation.finish() }
         for continuation in completionContinuations.values { continuation.finish() }
     }
@@ -85,6 +87,7 @@ public actor BackgroundTaskManager: BackgroundTaskStore {
     public func cancel(taskID: UUID) async {
         guard var record = records[taskID], record.status == .running else { return }
         processes.removeValue(forKey: taskID)?.terminate()
+        inProcessAgents.removeValue(forKey: taskID)?.cancel()
         record.status = .cancelled
         record.finishedAt = Date()
         record.latestActivity = "Cancelled"
@@ -98,7 +101,7 @@ public actor BackgroundTaskManager: BackgroundTaskStore {
     @discardableResult
     public func spawnAgent(kind: BackgroundTask.Kind, prompt: String, workingDirectory: String? = nil,
                            title: String, model: String? = nil) async throws -> BackgroundTask {
-        guard kind != .shellCommand else { throw BackgroundExecutionError.message("Choose codex or claude for an agent.") }
+        guard kind == .codexAgent || kind == .claudeAgent else { throw BackgroundExecutionError.message("Choose codex or claude for an agent.") }
         let executable = try await AgentExecutableResolver.resolve(kind == .codexAgent ? "codex" : "claude")
         let directory = try prepareDirectory(workingDirectory)
         let record = PersistedBackgroundTask(kind: kind, title: title, directory: directory.path, model: model)
@@ -107,11 +110,61 @@ public actor BackgroundTaskManager: BackgroundTaskStore {
                          environment: executable.environment, prompt: prompt)
     }
 
+    /// An agent that runs inside Ambient instead of a CLI. `run` reports what it is doing and returns its final answer.
+    public typealias InProcessAgent = @Sendable (_ prompt: String, _ reportActivity: @escaping @Sendable (String) -> Void) async throws -> String
+
+    @discardableResult
+    public func spawnInProcessAgent(prompt: String, title: String, run: @escaping InProcessAgent) throws -> BackgroundTask {
+        let record = PersistedBackgroundTask(kind: .ambientAgent, title: title, directory: workspaceDirectory.path)
+        let taskID = record.id
+        records[taskID] = record
+        try appendTranscript("\nUser: \(prompt)\n", taskID: taskID)
+        try persist(taskID)
+        inProcessAgents[taskID] = Task { [weak self] in
+            let outcome: Result<String, Error>
+            do {
+                outcome = .success(try await run(prompt) { [weak self] activity in Task { await self?.recordActivity(activity, taskID: taskID) } })
+            } catch { outcome = .failure(error) }
+            await self?.finishInProcessAgent(taskID: taskID, outcome: outcome)
+        }
+        publish()
+        return record.task
+    }
+
+    private func recordActivity(_ activity: String, taskID: UUID) {
+        guard var record = records[taskID], record.status == .running else { return }
+        record.latestActivity = AgentEventParser.singleLine(activity)
+        records[taskID] = record
+        do { try appendTranscript(activity, taskID: taskID); try persist(taskID) }
+        catch { recordStorageFailure(taskID, error: error) }
+        publish()
+    }
+
+    private func finishInProcessAgent(taskID: UUID, outcome: Result<String, Error>) {
+        // A cancelled task was already finished by cancel(taskID:).
+        guard inProcessAgents.removeValue(forKey: taskID) != nil, var record = records[taskID], record.status == .running else { return }
+        switch outcome {
+        case .success(let answer):
+            record.status = .succeeded
+            record.result = answer
+            record.latestActivity = "Finished"
+        case .failure(let error):
+            record.status = .failed
+            record.result = error.localizedDescription
+            record.latestActivity = "Failed"
+        }
+        record.finishedAt = Date()
+        records[taskID] = record
+        do { try appendTranscript(record.result ?? "", taskID: taskID); try persist(taskID) }
+        catch { recordStorageFailure(taskID, error: error) }
+        publishCompletion(taskID)
+    }
+
     @discardableResult
     public func continueAgent(taskID: UUID, message: String) async throws -> BackgroundTask {
         guard let previous = records[taskID] else { throw BackgroundExecutionError.message("Task not found.") }
         guard previous.status != .running else { throw BackgroundExecutionError.message("The agent is still running. Wait for it to finish first.") }
-        guard previous.kind != .shellCommand, previous.sessionID != nil else {
+        guard previous.sessionID != nil else {
             throw BackgroundExecutionError.message("This task has no resumable agent session.")
         }
         let executable = try await AgentExecutableResolver.resolve(previous.kind == .codexAgent ? "codex" : "claude")
