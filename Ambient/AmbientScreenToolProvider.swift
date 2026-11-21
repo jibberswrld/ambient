@@ -11,6 +11,9 @@ final class AmbientScreenToolProvider: ToolProvider {
     private(set) var captures: [AmbientScreenCapture] = []
 
     func clearCaptures() { captures = [] }
+    /// Runs the handler on the main actor. Calling the stored closure from a tool's own task moved a window off
+    /// the main thread, which AppKit ends the app for.
+    func clearDrawing() -> Bool { clearDrawingHandler?() ?? false }
     func tools() async -> [any AmbientTool] {
         [ScreenTool(provider: self, isPointing: false), ScreenTool(provider: self, isPointing: true), DrawTool(provider: self), ClearDrawingTool(provider: self)]
     }
@@ -197,7 +200,7 @@ private struct ClearDrawingTool: AmbientTool {
     }
     func activityLabel(arguments: JSONValue) -> String? { "Clearing the drawing" }
     func run(arguments: JSONValue) async -> ToolResult {
-        let removed = await provider.clearDrawingHandler?() ?? false
+        let removed = await provider.clearDrawing()
         return ToolResult(content: removed ? "The drawing is removed." : "There was no drawing on screen.")
     }
 }
