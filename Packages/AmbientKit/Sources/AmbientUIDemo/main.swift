@@ -141,6 +141,18 @@ final class DemoApplicationDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Prints where the bar really ended up, so a short on-screen run can be checked even without a screenshot.
+    func applicationWillTerminate(_ notification: Notification) {
+        guard let controller = flowBarController, let screen = controller.dockedScreen else { return }
+        let surfaceFrame = controller.barSurfaceFrameOnScreen
+        let visibleFrame = screen.visibleFrame
+        print("Placement: \(controller.placement.edge.rawValue) at \(controller.placement.positionAlongEdge) on \(screen.localizedName)")
+        print("Visible frame: \(visibleFrame)")
+        print("Panel frame: \(controller.panelWindow.frame)")
+        print("Bar surface: \(surfaceFrame) inside visible frame: \(visibleFrame.contains(surfaceFrame))")
+        print("Presentation: \(flowBarModel.presentation.rawValue)")
+    }
+
     // MARK: Flow bar
 
     private func showFlowBar() {

@@ -1,13 +1,13 @@
 // AMBIENT DESIGN DIRECTION
 //
-// Ambient is a sliver of smoked glass that lives on the edge of the screen with one warm light inside it.
-// Material: dark smoked glass everywhere the assistant speaks (Liquid Glass tinted toward graphite on macOS 26,
-// a behind-window HUD material on 14 and 15), always dark so it reads the same on light and dark desktops.
-// Shape: one continuous capsule that grows into a rounded card and back; nothing appears that the capsule did
-// not grow into. Motion: critically damped springs for every size change, a little bounce only when the person
-// throws the bar to an edge, interruptible always. Accent: a single ember orange, used only for "Ambient is
-// paying attention" (the voice glow, the thinking ember, the one primary action). Type: SF Pro at small,
-// confident sizes with tight tracking on titles and tabular figures for anything that counts.
+// Material and shape: one piece of dense, warm smoked glass (Liquid Glass tinted graphite on macOS 26, a HUD blur
+// on 14 and 15) with a lit rim, always dark so it reads as one crisp object on white pages and dark desktops alike;
+// it is a capsule that grows into a rounded card and back, and nothing appears that the capsule did not grow into.
+// Motion: critically damped, interruptible springs for every size change; the only bounce is the bar landing after
+// a throw, because the hand gave it momentum; Reduce Motion swaps springs for short fades.
+// Accent: a single ember orange that means "Ambient is paying attention" (the voice, the thinking ember, the
+// pointer) or "the one primary action", never decoration.
+// Type: SF Pro at small, confident sizes, tight tracking on titles, tabular figures for anything that counts.
 
 import AppKit
 import SwiftUI
