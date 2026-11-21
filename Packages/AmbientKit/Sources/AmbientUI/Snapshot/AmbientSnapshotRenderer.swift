@@ -80,6 +80,22 @@ public enum AmbientSnapshotRenderer {
 }
 
 extension AmbientSnapshotRenderer {
+    /// The tour as the person sees it: the real bar docked to `barEdge` and the coach card in the corner away from
+    /// it, on a canvas filled with `backdrop`. Host it in an off-screen window to capture it.
+    public static func tourCanvas(tourModel: AmbientTourModel, barModel: FlowBarModel, barEdge: FlowBarDockEdge, canvasSize: CGSize, backdrop: NSImage) -> some View {
+        let corner = AmbientTourCoachCorner.corner(awayFromBarDockedTo: barEdge)
+        let inset = AmbientTourPanelController.insetFromScreenEdge
+        return ZStack(alignment: .topLeading) {
+            flowBarCanvas(model: barModel, edge: barEdge, canvasSize: canvasSize, backdrop: backdrop)
+            AmbientTourCoachCard(model: tourModel)
+                .padding(inset)
+                .frame(width: canvasSize.width, height: canvasSize.height, alignment: corner.cardAlignmentInPanel)
+        }
+        .frame(width: canvasSize.width, height: canvasSize.height)
+        .environment(\.ambientSurfaceRenderingMode, .snapshot(AmbientSnapshotBackdrop(
+            blurredImage: blurred(scaledToFill(backdrop, canvasSize: canvasSize), radius: 26), canvasSize: canvasSize)))
+    }
+
     /// Any view (the pointer, for example) on a canvas filled with `backdrop`, with glass drawn as in a capture.
     public static func renderOverBackdrop<Content: View>(_ content: Content, canvasSize: CGSize, backdrop: NSImage, scale: CGFloat = 2) -> NSImage? {
         let backdropFillingCanvas = scaledToFill(backdrop, canvasSize: canvasSize)
@@ -108,11 +124,6 @@ public enum AmbientOnboardingPreview {
 
     public static func permissions(_ permissionsModel: AmbientPermissionsModel) -> some View {
         previewRoot(.permissions(permissionsModel))
-    }
-
-    public static func firstRun(_ firstRunModel: AmbientFirstRunModel, showingEdgeStep: Bool = false) -> some View {
-        if showingEdgeStep { firstRunModel.advanceToEdgeStep() }
-        return previewRoot(.firstRun(firstRunModel))
     }
 
     private static func previewRoot(_ screen: AmbientOnboardingCoordinator.Screen) -> some View {

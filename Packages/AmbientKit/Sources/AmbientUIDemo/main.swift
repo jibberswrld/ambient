@@ -4,6 +4,7 @@
 //   swift run --scratch-path .build-ui AmbientUIDemo --script --quit-after 60
 //   swift run --scratch-path .build-ui AmbientUIDemo --settings connectors --quit-after 10
 //   swift run --scratch-path .build-ui AmbientUIDemo --capture docs/ui-captures
+//   swift run --scratch-path .build-ui AmbientUIDemo --capture docs/ui-captures --capture-tour-only
 //
 // Every on-screen run should pass --quit-after so the demo never stays on the screen by accident.
 
@@ -25,6 +26,8 @@ struct DemoLaunchOptions {
     var captureEdges: [FlowBarDockEdge] = [.bottom, .left]
     var captureStates: [DemoFlowBarState] = DemoFlowBarState.allCases
     var capturesWindows = true
+    /// Renders only the guided tour's coach states, which is quick, instead of every bar state and window.
+    var capturesTourOnly = false
     var quitAfterSeconds: Double?
     /// Takes a screenshot of the bar's region after this many seconds, then quits. Needs screen recording permission.
     var screenshotPath: String?
@@ -57,7 +60,7 @@ struct DemoLaunchOptions {
                 options.opensSettings = true
                 if let name = nextValue() { options.settingsSection = AmbientSettingsSection(rawValue: name) }
             case "--onboarding":
-                options.onboardingScreen = nextValue().flatMap(DemoOnboardingScreen.init(rawValue:)) ?? .firstRun
+                options.onboardingScreen = nextValue().flatMap(DemoOnboardingScreen.init(rawValue:)) ?? .permissions
             case "--pointer":
                 options.showsPointer = true
             case "--no-bar":
@@ -68,6 +71,8 @@ struct DemoLaunchOptions {
                 if let list = nextValue() { options.captureEdges = list.split(separator: ",").compactMap { FlowBarDockEdge(rawValue: String($0)) } }
             case "--capture-states":
                 if let list = nextValue() { options.captureStates = list.split(separator: ",").compactMap { DemoFlowBarState(rawValue: String($0)) } }
+            case "--capture-tour-only":
+                options.capturesTourOnly = true
             case "--capture-bar-only":
                 options.capturesWindows = false
             case "--quit-after":
@@ -244,6 +249,13 @@ final class DemoApplicationDelegate: NSObject, NSApplicationDelegate {
     // MARK: Captures
 
     private func runCaptures(into directory: URL) async {
+        print("Rendering the guided tour into \(directory.appendingPathComponent("tour").path)")
+        await DemoTourCaptures.captureAll(into: directory)
+        if options.capturesTourOnly {
+            print("Done")
+            NSApp.terminate(nil)
+            return
+        }
         print("Rendering flow bar states into \(directory.path)")
         await DemoCaptureRunner.captureFlowBarStates(into: directory, edges: options.captureEdges, states: options.captureStates, backdrops: DemoBackdrop.allCases, includeIncreasedContrast: true)
         if options.capturesWindows {

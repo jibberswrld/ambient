@@ -1,4 +1,3 @@
-import AppKit
 import Foundation
 import Observation
 
@@ -41,14 +40,18 @@ public struct AmbientGateContent: Equatable, Sendable {
 // MARK: - Permissions
 
 public enum AmbientPermissionKind: String, CaseIterable, Identifiable, Sendable {
-    case microphone, accessibility, screenRecording
+    case microphone, accessibility, screenRecording, speechRecognition
     public var id: String { rawValue }
+
+    /// Speech Recognition is optional: without it, recordings are transcribed by publik instead of on this Mac.
+    public var isRequired: Bool { self != .speechRecognition }
 
     var title: String {
         switch self {
         case .microphone: return "Microphone"
         case .accessibility: return "Accessibility"
         case .screenRecording: return "Screen Recording"
+        case .speechRecognition: return "Speech Recognition"
         }
     }
 
@@ -58,6 +61,7 @@ public enum AmbientPermissionKind: String, CaseIterable, Identifiable, Sendable 
         case .microphone: return "To hear you while you hold the keys. Never otherwise."
         case .accessibility: return "To notice the shortcut in any app and point at things."
         case .screenRecording: return "To see your screen when you ask about it."
+        case .speechRecognition: return "To turn what you say into text on this Mac."
         }
     }
 
@@ -66,6 +70,7 @@ public enum AmbientPermissionKind: String, CaseIterable, Identifiable, Sendable 
         case .microphone: return "mic.fill"
         case .accessibility: return "accessibility"
         case .screenRecording: return "rectangle.dashed.badge.record"
+        case .speechRecognition: return "waveform"
         }
     }
 }
@@ -97,70 +102,13 @@ public final class AmbientPermissionsModel {
         statuses[kind] ?? .notYetAsked
     }
 
-    public var areAllGranted: Bool {
-        AmbientPermissionKind.allCases.allSatisfy { status(of: $0) == .granted }
+    /// Every permission Ambient cannot work without. Speech Recognition is optional and does not count.
+    public var areRequiredPermissionsGranted: Bool {
+        AmbientPermissionKind.allCases.filter(\.isRequired).allSatisfy { status(of: $0) == .granted }
     }
 
-    /// The row whose button is the one ember action: the first permission still missing.
+    /// The row whose button is the one ember action: the first required permission still missing.
     var firstMissingPermission: AmbientPermissionKind? {
-        AmbientPermissionKind.allCases.first { status(of: $0) != .granted }
-    }
-}
-
-// MARK: - First run
-
-/// The first-run moment: learn the one gesture, then choose the edge.
-@MainActor
-@Observable
-public final class AmbientFirstRunModel {
-    public enum Step: Equatable, Sendable { case gesture, edge }
-
-    public var shortcut: AmbientPushToTalkShortcut
-    public var chosenEdge: FlowBarDockEdge {
-        didSet { if chosenEdge != oldValue { onDockEdgeChosen?(chosenEdge) } }
-    }
-    /// True while both keys are down. The onboarding window watches the keys itself while it is focused; the app
-    /// may also set this from its global shortcut monitor.
-    public var isShortcutHeld = false {
-        didSet {
-            guard isShortcutHeld != oldValue else { return }
-            if isShortcutHeld {
-                shortcutHeldSince = Date()
-            } else if let shortcutHeldSince, Date().timeIntervalSince(shortcutHeldSince) > 0.35 {
-                // A real hold and release: the person has done the gesture once.
-                hasCompletedGesture = true
-            }
-            if !isShortcutHeld { shortcutHeldSince = nil }
-        }
-    }
-    /// The live microphone level while the keys are held, 0 to 1. When the app does not supply it, the practice
-    /// waveform shows a gentle idle motion instead.
-    public var audioLevel: Double?
-    public private(set) var hasCompletedGesture = false
-    public internal(set) var step: Step = .gesture
-
-    public var onDockEdgeChosen: ((FlowBarDockEdge) -> Void)?
-    /// The person finished the first run.
-    public var onFinish: (() -> Void)?
-
-    private var shortcutHeldSince: Date?
-
-    public init(shortcut: AmbientPushToTalkShortcut = .controlOption, chosenEdge: FlowBarDockEdge = .bottom) {
-        self.shortcut = shortcut
-        self.chosenEdge = chosenEdge
-    }
-
-    func advanceToEdgeStep() { step = .edge }
-    func returnToGestureStep() { step = .gesture }
-    func finish() { onFinish?() }
-
-    /// Whether a set of pressed modifier keys is exactly the push-to-talk shortcut.
-    static func modifierFlags(_ pressedFlags: NSEvent.ModifierFlags, match shortcut: AmbientPushToTalkShortcut) -> Bool {
-        let relevantFlags = pressedFlags.intersection([.control, .option, .command, .shift])
-        switch shortcut {
-        case .controlOption: return relevantFlags == [.control, .option]
-        case .optionCommand: return relevantFlags == [.option, .command]
-        case .controlCommand: return relevantFlags == [.control, .command]
-        }
+        AmbientPermissionKind.allCases.first { $0.isRequired && status(of: $0) != .granted }
     }
 }

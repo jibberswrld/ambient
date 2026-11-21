@@ -6,7 +6,7 @@ Ambient is a macOS menu bar app forked from [Clicky](https://github.com/farzaa/c
 
 The app target links the local `Packages/AmbientKit` library. Its pipeline is Control+Option → temporary PCM WAV → `PublikSpeechClient.transcribe` → `AmbientAgentSession` with tools → memory learning and optional publik speech playback. The inherited vendor clients, Cloudflare Worker endpoints and pointing-tag parser have been removed.
 
-The app imports `AmbientUI`. `AmbientAppDelegate` owns the live flow bar, settings, permissions, first-run window, status menu, shortcut and transient pointer. No inherited Clicky presentation remains.
+The app imports `AmbientUI`. `AmbientAppDelegate` owns the live flow bar, settings, permissions, guided tour, status menu, shortcut and transient pointer. No inherited Clicky presentation remains.
 
 ## Architecture
 
@@ -27,9 +27,9 @@ The app imports `AmbientUI`. `AmbientAppDelegate` owns the live flow bar, settin
 - `NSLog` records local state, tool names, speech synthesis/playback and final background statuses. These logs contain conversation text; do not add credentials or raw tool payloads.
 - `FlowBarPanelController` persists full placement with `FlowBarPlacementStore`. Settings receives the real connector, memory, skill and task stores. The Activity page can select the exact task requested from the tray.
 - Settings persists spoken replies, background approval and shortcut choice. Login registration uses `SMAppService.mainApp` only when explicitly switched on, off by default. `GET /wallet` supplies optional handle, plan label and percentage remaining; no currency amounts or inferred allowance appear.
-- Onboarding checks microphone, accessibility and screen recording live, exposes system grant actions, then teaches the shortcut and edge choice. Completion uses `ambient.onboardingCompleted`. Revoked permissions reopen the permissions step.
+- Onboarding is the sign-in gate and a permissions step in `AmbientOnboardingWindowController`. It checks microphone, accessibility and screen recording (required) and speech recognition (optional; without it transcription falls back to publik) live and exposes system grant actions. Then the window closes and the guided tour teaches Ambient on the real desktop with the real bar: `AmbientTourModel` is a pure state machine the app feeds with real events (shortcut holds, runtime phases, agent events, approvals, dock edge, connected apps, permissions), and `AmbientTourPanelController` shows its coach card in a non-activating panel in the corner away from the bar. Lessons: talk, show it your screen, hand off a job, connect apps (optional), place the bar; each completes only when it really happens. Completion uses `ambient.onboardingCompleted`, set when the tour finishes or is ended. Revoked required permissions reopen the permissions step.
 - `AmbientPointerWindowController` creates a click-through transparent panel on the captured display for `point_at` (`AmbientPointerView`, removed after four seconds) or `draw_on_screen` (`AmbientAnnotationOverlayView`, removed after 45 seconds or at the next request). It holds one thing at a time. No cursor follower or welcome bubble exists.
-- The template waveform status menu provides Open Settings, Show / Hide Bar, and Quit Ambient. Command-comma also opens Settings.
+- The template waveform status menu provides Open Settings, Show / Hide Bar, Replay the Tour and Quit Ambient. Command-comma also opens Settings.
 
 `AmbientTests/` covers permission routing, URL decoding and wallet mapping; `AmbientUITests/` retains inherited launch smoke tests. Run package and app tests after integration changes, and launch/interact with the signed app to verify actual behavior.
 

@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import ScreenCaptureKit
+import Speech
 
 enum PermissionRequestPresentationDestination: Equatable {
     case alreadyGranted
@@ -124,6 +125,26 @@ enum AmbientPermissionHelper {
     /// Opens System Settings to the Screen Recording pane.
     static func openScreenRecordingSettings() {
         guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    // MARK: - Speech Recognition Permission
+
+    /// On-device transcription needs it. It is optional: without it recordings are transcribed by publik.
+    static func speechRecognitionAuthorizationStatus() -> SFSpeechRecognizerAuthorizationStatus {
+        SFSpeechRecognizer.authorizationStatus()
+    }
+
+    /// Shows the system prompt and returns once the person has answered it.
+    static func requestSpeechRecognitionPermission() async -> SFSpeechRecognizerAuthorizationStatus {
+        await withCheckedContinuation { continuation in
+            SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0) }
+        }
+    }
+
+    /// Opens System Settings to the Speech Recognition pane.
+    static func openSpeechRecognitionSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition") else { return }
         NSWorkspace.shared.open(url)
     }
 

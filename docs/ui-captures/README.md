@@ -8,7 +8,10 @@ Rendered off screen by the demo, so nothing appears on the desktop while they ar
 
 - `flow-bar/` every bar state on the bottom and left edges, over a dark and a light desktop with a text window
   behind the bar. `-contrast` files force the Increase Contrast look.
-- `windows/` settings (light and dark), onboarding (gate, permissions, first run) and the pointer.
+- `windows/` settings (light and dark), onboarding (gate, permissions) and the pointer.
+- `tour/` every guided-tour coach state (waiting, listening, thinking, nudges, missing permissions, failure,
+  completed, the closing cheat sheet) beside the real bar, over the dark and light desktops, plus the four-row
+  permissions screen. `--capture-tour-only` renders just these in a few seconds.
 - `sheets/` contact sheets of the above.
 
 Glass in these files is simulated: the renderer draws each surface over a blurred copy of the backdrop, because live
