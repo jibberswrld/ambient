@@ -108,7 +108,7 @@ final class AmbientMemoryTests: XCTestCase {
         XCTAssertEqual(settingUpdate, deletionUpdate)
     }
 
-    func testLearningAddsAndUsesFastTierWithExistingMemories() async throws {
+    func testLearningAddsAndUsesBalancedTierWithExistingMemories() async throws {
         let service = StubTextCompletionService(["{\"add\":[\"Prefers direct answers.\"],\"rewrite\":[],\"remove\":[]}"])
         let store = try memoryStore(service)
         _ = try await store.remember(text: "Works on Harbor.")
@@ -118,7 +118,7 @@ final class AmbientMemoryTests: XCTestCase {
         XCTAssertEqual(items.filter(\.wasLearnedAutomatically).map(\.text), ["Prefers direct answers."])
         let calls = await service.calls
         XCTAssertEqual(calls.count, 1)
-        XCTAssertEqual(calls[0].tier, .fast)
+        XCTAssertEqual(calls[0].tier, .balanced)
         XCTAssertTrue(calls[0].userPrompt.contains("Works on Harbor."))
         XCTAssertTrue(calls[0].userPrompt.contains("Skip the preamble"))
         XCTAssertTrue(calls[0].systemPrompt.contains("Never store secrets"))
