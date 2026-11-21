@@ -7,6 +7,7 @@
 
 import Foundation
 import Testing
+import AmbientUI
 @testable import Ambient
 
 @MainActor
@@ -49,6 +50,25 @@ struct AmbientTests {
             let url = try #require(URL(string: address))
             #expect(AmbientAppDelegate.automationText(from: url) == nil)
         }
+    }
+
+    @Test func walletOmitsMissingPlanAndPercentage() throws {
+        let summary = AmbientAppDelegate.accountSummary(from: ["account": ["handle": "test"], "balance_micros": 123],
+            baseURL: try #require(URL(string: "https://publik.example/api/v1")))
+        #expect(summary.publikHandle == "test")
+        #expect(summary.planName == nil)
+        #expect(summary.usageRemainingFraction == nil)
+        #expect(summary.usageResetsOn == nil)
+    }
+
+    @Test func walletUsesReturnedPercentageWithoutInferringMoney() throws {
+        let summary = AmbientAppDelegate.accountSummary(from: ["remaining_percent": NSNull(), "prepaid_remaining_percent": 42,
+            "plan": ["label": "Plus"], "top_up_url": "https://publik.example/top-up"],
+            baseURL: try #require(URL(string: "https://publik.example/api/v1")))
+        #expect(summary.publikHandle == nil)
+        #expect(summary.planName == "Plus")
+        #expect(summary.usageRemainingFraction == 0.42)
+        #expect(summary.manageAccountURL.absoluteString == "https://publik.example/top-up")
     }
 
 }

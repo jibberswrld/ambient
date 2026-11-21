@@ -206,6 +206,7 @@ final class AmbientRuntime {
                     onAgentEvent?(event)
                     switch event {
                     case .textDelta(let fragment):
+                        guard !fragment.isEmpty else { continue }
                         accumulatedText += fragment
                         state.transition(to: .responding(text: accumulatedText))
                     case .toolStarted(let callID, let toolName, let activityLabel):

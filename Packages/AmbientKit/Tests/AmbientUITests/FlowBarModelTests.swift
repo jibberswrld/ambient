@@ -87,11 +87,11 @@ final class FlowBarModelTests: XCTestCase {
         let model = makeModel()
         model.beginThinking()
         let request = FlowBarApprovalRequest(title: "Run this command?", detail: "git status", kind: .shellCommand)
-        async let answer = model.requestApproval(request)
+        let answer = Task { await model.requestApproval(request) }
         await Task.yield()
         XCTAssertEqual(model.presentation, .approval)
         model.answerPendingApproval(isAllowed: true)
-        let wasAllowed = await answer
+        let wasAllowed = await answer.value
         XCTAssertTrue(wasAllowed)
         XCTAssertEqual(model.presentation, .thinking, "the turn resumes where it was")
     }
@@ -100,12 +100,34 @@ final class FlowBarModelTests: XCTestCase {
         let model = makeModel()
         var didCancel = false
         model.onCancelTurn = { didCancel = true }
-        async let answer = model.requestApproval(FlowBarApprovalRequest(title: "Start an agent?", detail: "Fix the flaky test", kind: .backgroundAgent))
+        let answer = Task { await model.requestApproval(FlowBarApprovalRequest(title: "Start an agent?", detail: "Fix the flaky test", kind: .backgroundAgent)) }
         await Task.yield()
         model.cancelCurrentTurn()
-        let wasAllowed = await answer
+        let wasAllowed = await answer.value
         XCTAssertFalse(wasAllowed)
         XCTAssertTrue(didCancel)
+    }
+
+    func testEmptyStreamDeltasKeepThinkingAndToolActivityVisible() {
+        let model = makeModel()
+        model.beginThinking()
+        model.apply(.textDelta(""))
+        XCTAssertEqual(model.presentation, .thinking)
+        model.apply(.toolStarted(callID: "search", toolName: "web_search", activityLabel: "Searching the web"))
+        model.apply(.textDelta(""))
+        XCTAssertEqual(model.presentation, .working)
+        XCTAssertEqual(model.currentActivityLine, "Searching the web")
+    }
+
+    func testCancellingApprovalTaskDeniesAndClearsTheCard() async {
+        let model = makeModel()
+        let task = Task { await model.requestApproval(FlowBarApprovalRequest(title: "Run?", detail: "pwd", kind: .shellCommand)) }
+        await Task.yield()
+        XCTAssertNotNil(model.pendingApproval)
+        task.cancel()
+        let allowed = await task.value
+        XCTAssertFalse(allowed)
+        XCTAssertNil(model.pendingApproval)
     }
 
     func testListeningOutranksTyping() {

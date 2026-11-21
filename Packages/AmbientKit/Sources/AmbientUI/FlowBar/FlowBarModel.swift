@@ -271,6 +271,7 @@ public final class FlowBarModel {
     public func apply(_ event: AgentEvent) {
         switch event {
         case .textDelta(let delta):
+            guard !delta.isEmpty else { return }
             if turnPhase != .responding { turnPhase = .responding }
             replyText += delta
             scheduleReplyReveal()
@@ -406,7 +407,7 @@ public final class FlowBarModel {
         onOpenSettings?()
     }
 
-    public func answerPendingApproval(isAllowed: Bool) {
+    func answerPendingApproval(isAllowed: Bool) {
         resolvePendingApproval(isAllowed: isAllowed)
     }
 

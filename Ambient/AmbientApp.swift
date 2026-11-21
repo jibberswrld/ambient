@@ -217,7 +217,7 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
     static func accountSummary(from wallet: [String: Any], baseURL: URL) -> AmbientAccountSummary {
         let account = wallet["account"] as? [String: Any]
         let plan = wallet["plan"] as? [String: Any]
-        let percentage = wallet["remaining_percent"] as? Double ?? wallet["prepaid_remaining_percent"] as? Double
+        let percentage = (wallet["remaining_percent"] as? NSNumber)?.doubleValue ?? (wallet["prepaid_remaining_percent"] as? NSNumber)?.doubleValue
         let reset = (wallet["resets_at"] as? String).flatMap { ISO8601DateFormatter().date(from: $0) }
         let accountURL = (wallet["top_up_url"] as? String).flatMap(URL.init(string:)) ?? baseURL.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("wallet")
         return AmbientAccountSummary(publikHandle: account?["handle"] as? String, planName: plan?["label"] as? String,
@@ -332,18 +332,6 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls {
             if let text = Self.automationText(from: url) { submit(text: text); continue }
-            #if DEBUG
-            if url.scheme == "ambient", url.host == "debug", ProcessInfo.processInfo.arguments.contains("--enable-ui-testing") {
-                let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-                let value = components?.queryItems?.first(where: { $0.name == "value" })?.value
-                switch url.path {
-                case "/approval": flowBarModel?.answerPendingApproval(isAllowed: value == "allow")
-                case "/settings": openSettings(section: value.flatMap(AmbientSettingsSection.init(rawValue:)))
-                case "/tasks": flowBarModel?.returnToIdle(); flowBarModel?.toggleTaskTray()
-                default: break
-                }
-            }
-            #endif
         }
     }
 
