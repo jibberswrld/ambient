@@ -276,6 +276,8 @@ struct AmbientAppLogo: View {
     var name: String
     var logoURL: URL?
 
+    @State private var loadedLogo: NSImage?
+
     var body: some View {
         let monogram = Text(String(name.prefix(1)).uppercased())
             .font(.system(size: 13, weight: .semibold))
@@ -283,23 +285,39 @@ struct AmbientAppLogo: View {
             .frame(width: 28, height: 28)
             .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(AmbientDesign.Palette.quietFill))
         Group {
-            if let logoURL {
-                AsyncImage(url: logoURL) { phase in
-                    if let image = phase.image {
-                        image.resizable().scaledToFit().padding(4)
-                            .frame(width: 28, height: 28)
-                            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.white))
-                    } else {
-                        monogram
-                    }
-                }
+            if let loadedLogo {
+                Image(nsImage: loadedLogo).resizable().interpolation(.high).scaledToFit().padding(4)
+                    .frame(width: 28, height: 28)
+                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.white))
             } else {
                 monogram
             }
         }
+        // Connector logos are SVG, which AsyncImage cannot decode; NSImage can.
+        .task(id: logoURL) {
+            loadedLogo = nil
+            guard let logoURL else { return }
+            loadedLogo = await AmbientAppLogoCache.shared.logo(at: logoURL)
+        }
         .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(AmbientDesign.Palette.cardHairline, lineWidth: 1))
         .accessibilityHidden(true)
+    }
+}
+
+/// Logos fetched once per launch, so searching and scrolling the list never refetches or flickers.
+@MainActor
+final class AmbientAppLogoCache {
+    static let shared = AmbientAppLogoCache()
+    private var logosByURL: [URL: NSImage] = [:]
+
+    func logo(at logoURL: URL) async -> NSImage? {
+        if let cachedLogo = logosByURL[logoURL] { return cachedLogo }
+        guard let (data, response) = try? await URLSession.shared.data(from: logoURL),
+              (response as? HTTPURLResponse)?.statusCode == 200, let logo = NSImage(data: data), logo.isValid,
+              logo.size.width > 0, logo.size.height > 0 else { return nil }
+        logosByURL[logoURL] = logo
+        return logo
     }
 }
 
