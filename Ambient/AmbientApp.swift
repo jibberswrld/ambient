@@ -134,6 +134,7 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
         shortcutSubscription = shortcutMonitor.shortcutTransitionPublisher.sink { [weak self] in self?.handleShortcut($0) }
         settingsModel?.onGeneralSettingsChanged = { [weak self] in self?.applySettings($0) }
         shortcutMonitor.shortcut = settingsModel?.generalSettings.pushToTalkShortcut ?? .controlOption
+        model.pushToTalkShortcut = shortcutMonitor.shortcut
         backgroundUpdatesTask = Task { [weak model] in
             for await tasks in runtime.backgroundTaskStore.updates() {
                 guard !Task.isCancelled else { return }
@@ -230,6 +231,8 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
         runtime.approvalSettings.allowWithoutAsking = settings.runsCommandsWithoutAsking
         UserDefaults.standard.set(settings.pushToTalkShortcut.rawValue, forKey: "ambient.pushToTalkShortcut")
         shortcutMonitor.shortcut = settings.pushToTalkShortcut
+        flowBarModel?.pushToTalkShortcut = settings.pushToTalkShortcut
+        firstRunModel?.shortcut = settings.pushToTalkShortcut
         if flowBarController?.placement.edge != settings.dockEdge { flowBarController?.dock(to: settings.dockEdge) }
         if settings.launchesAtLogin != (SMAppService.mainApp.status == .enabled) {
             do {
@@ -247,9 +250,12 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
     private func refreshPermissions() {
         let microphone = AVCaptureDevice.authorizationStatus(for: .audio)
         permissionsModel.statuses = [
-            .microphone: microphone == .authorized ? .granted : (microphone == .notDetermined ? .notYetAsked : .deniedInSystemSettings),
-            .accessibility: AmbientPermissionHelper.hasAccessibilityPermission() ? .granted : .deniedInSystemSettings,
-            .screenRecording: AmbientPermissionHelper.hasScreenRecordingPermission() ? .granted : .deniedInSystemSettings
+            .microphone: microphone == .authorized ? .granted : (microphone == .notDetermined
+                ? (permissionsModel.status(of: .microphone) == .waiting ? .waiting : .notYetAsked) : .deniedInSystemSettings),
+            .accessibility: AmbientPermissionHelper.hasAccessibilityPermission() ? .granted
+                : (UserDefaults.standard.bool(forKey: "ambient.accessibilityRequested") ? .deniedInSystemSettings : .notYetAsked),
+            .screenRecording: AmbientPermissionHelper.hasScreenRecordingPermission() ? .granted
+                : (UserDefaults.standard.bool(forKey: "ambient.screenRecordingRequested") ? .deniedInSystemSettings : .notYetAsked)
         ]
         if permissionsModel.status(of: .accessibility) == .granted { shortcutMonitor.start() }
         else { shortcutMonitor.stop() }
@@ -272,8 +278,20 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!)
             }
-        case .accessibility: AmbientPermissionHelper.requestAccessibilityPermission()
-        case .screenRecording: AmbientPermissionHelper.requestScreenRecordingPermission()
+        case .accessibility:
+            if permissionsModel.status(of: .accessibility) == .deniedInSystemSettings {
+                AmbientPermissionHelper.openAccessibilitySettings()
+            } else {
+                UserDefaults.standard.set(true, forKey: "ambient.accessibilityRequested")
+                AmbientPermissionHelper.requestAccessibilityPermission()
+            }
+        case .screenRecording:
+            if permissionsModel.status(of: .screenRecording) == .deniedInSystemSettings {
+                AmbientPermissionHelper.openScreenRecordingSettings()
+            } else {
+                UserDefaults.standard.set(true, forKey: "ambient.screenRecordingRequested")
+                AmbientPermissionHelper.requestScreenRecordingPermission()
+            }
         }
         refreshPermissions()
     }

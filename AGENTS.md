@@ -29,7 +29,7 @@ The app imports `AmbientUI`. `AmbientAppDelegate` owns the live flow bar, settin
 - `AmbientPointerWindowController` creates a click-through transparent panel only for `point_at`, on the captured display, with `AmbientPointerView` centered at the target and its label flipped inward. It removes the panel after four seconds. No cursor follower or welcome bubble exists.
 - The template waveform status menu provides Open Settings, Show / Hide Bar, and Quit Ambient. Command-comma also opens Settings.
 
-`AmbientTests/` covers permission routing and URL decoding; `AmbientUITests/` retains inherited launch smoke tests. Run package and app tests after integration changes, and launch/interact with the signed app to verify actual behavior.
+`AmbientTests/` covers permission routing, URL decoding and wallet mapping; `AmbientUITests/` retains inherited launch smoke tests. Run package and app tests after integration changes, and launch/interact with the signed app to verify actual behavior.
 
 ## Build & Run
 

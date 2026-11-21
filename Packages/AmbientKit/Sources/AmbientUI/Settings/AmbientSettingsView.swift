@@ -411,7 +411,7 @@ struct AmbientAccountSettingsPage: View {
                 .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(AmbientDesign.Palette.cardBackground))
                 .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(AmbientDesign.Palette.cardHairline, lineWidth: 1))
             } else {
-                AmbientEmptyState(symbolName: "person.crop.circle.badge.questionmark", title: "Not signed in", message: "Sign in with publik to use Ambient.")
+                AmbientEmptyState(symbolName: "person.crop.circle.badge.questionmark", title: "Account details", message: "Your account details have not loaded yet. Open Settings again to retry.")
             }
         }
     }

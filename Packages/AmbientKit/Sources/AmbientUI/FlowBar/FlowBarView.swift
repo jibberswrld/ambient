@@ -189,10 +189,11 @@ struct FlowBarHoverContent: View {
             if isUpright {
                 VStack(spacing: 8) {
                     VStack(spacing: 4) {
-                        AmbientKeycap(systemImageName: "control")
-                        AmbientKeycap(systemImageName: "option")
+                        ForEach(model.pushToTalkShortcut.keycapSymbolNames, id: \.self) { symbolName in
+                            AmbientKeycap(systemImageName: symbolName)
+                        }
                     }
-                    .help("Hold Control and Option, then talk")
+                    .help("Hold \(model.pushToTalkShortcut.spokenName), then talk")
                     if !model.backgroundTasks.isEmpty { FlowBarTasksChip(model: model, isUpright: true) }
                     divider
                     AmbientGlassIconButton(systemImageName: "keyboard", accessibilityLabelText: "Type instead") { model.beginTyping() }
@@ -203,8 +204,9 @@ struct FlowBarHoverContent: View {
             } else {
                 HStack(spacing: 8) {
                     HStack(spacing: 3) {
-                        AmbientKeycap(systemImageName: "control")
-                        AmbientKeycap(systemImageName: "option")
+                        ForEach(model.pushToTalkShortcut.keycapSymbolNames, id: \.self) { symbolName in
+                            AmbientKeycap(systemImageName: symbolName)
+                        }
                     }
                     Text("Hold to talk")
                         .font(AmbientDesign.Typeface.pillLabel)

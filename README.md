@@ -62,3 +62,15 @@ The Debug build also accepts `scripts/run.sh --transcribe-wav /absolute/path/to/
 ## License
 
 MIT. Original work: Copyright (c) 2026 Farza. Ambient changes: Copyright (c) 2026 Jabir O. Mohamed. See `LICENSE`.
+
+## Integration verification (2026-11-20)
+
+The signed app was built and launched with `scripts/run.sh` using an environment-only development credential. Spoken replies were disabled during testing. Package tests passed: 129 total, 5 skipped, no failures. App unit tests passed: 7 total, no failures.
+
+- A real `ambient://ask` arithmetic request went through thinking, streamed deltas and the finished answer. Native window captures showed Thinking and the finished reply with its actions.
+- A real web search logged “Searching the web” and returned the official Swift website. The short activity interval was not captured visually.
+- With Run commands without asking off, a read-only Codex task showed the approval card. Allow was clicked through native automation, the task finished successfully in eight seconds, and its tray Transcript button opened the correct Settings activity record.
+- Settings showed the real connector catalog, empty memory store, four built-in skills, the selected task transcript, and the wallet’s handle and prepaid percentage. Its absent plan label was omitted. Open at login reflected an existing system registration; this integration does not automatically register it.
+- Two real screen-tool turns captured the display, called `point_at`, and logged the labeled pointer at the mapped coordinates and removal about four seconds later. The pointer itself was not visually captured.
+
+The agent process cannot use `screencapture` (“could not create image from display”). Native automation captured Ambient windows instead; these do not prove live glass compositing over the desktop. Captures are local, ignored files under `build/integration-captures/`. The permissions grant actions, a fresh browser sign-in, live voice recording, actual 402 response, pointer appearance and a second physical display were not exercised in this integration run. Native automation could inspect the resting non-activating panel but could not target it for hover/drag/typing actions (`noWindowsAvailable` / `cgWindowNotFound`); those interactions remain unverified live. Existing permissions and development sign-in were available. Error/approval/onboarding state behavior is covered by package tests. Temporary Debug URL controls used to open the tray during verification were removed; approvals were answered through the real Allow button.

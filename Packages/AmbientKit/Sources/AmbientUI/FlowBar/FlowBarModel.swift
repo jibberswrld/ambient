@@ -145,6 +145,7 @@ public final class FlowBarModel {
     public private(set) var isTyping = false {
         didSet { if isTyping != oldValue { onTypingStateChanged?(isTyping) } }
     }
+    public var pushToTalkShortcut: AmbientPushToTalkShortcut = .controlOption
     public var typedText = ""
     public private(set) var isTaskTrayExpanded = false
     /// Set by the panel controller from the real pointer position.
