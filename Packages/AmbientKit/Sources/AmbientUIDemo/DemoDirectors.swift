@@ -130,10 +130,9 @@ struct DemoScript {
 
 enum DemoOnboardingScreen: String, CaseIterable {
     case gate, permissions
-    case firstRun = "first-run"
 }
 
-/// Walks the onboarding window through sign-in, permissions and first run with fake answers.
+/// Walks the onboarding window through sign-in and permissions with fake answers.
 @MainActor
 final class DemoOnboardingDirector {
     private let onboarding = AmbientOnboardingWindowController()
@@ -147,7 +146,6 @@ final class DemoOnboardingDirector {
         switch screen {
         case .gate: Task { await runGate() }
         case .permissions: showPermissions()
-        case .firstRun: showFirstRun()
         }
     }
 
@@ -161,7 +159,7 @@ final class DemoOnboardingDirector {
     }
 
     private func showPermissions() {
-        let permissionsModel = AmbientPermissionsModel(statuses: [.microphone: .granted, .accessibility: .notYetAsked, .screenRecording: .deniedInSystemSettings])
+        let permissionsModel = AmbientPermissionsModel(statuses: [.microphone: .granted, .accessibility: .notYetAsked, .screenRecording: .deniedInSystemSettings, .speechRecognition: .notYetAsked])
         permissionsModel.onGrant = { [weak permissionsModel] kind in
             print("Intent: grant \(kind.rawValue)")
             permissionsModel?.statuses[kind] = .waiting
@@ -170,21 +168,8 @@ final class DemoOnboardingDirector {
                 permissionsModel?.statuses[kind] = .granted
             }
         }
-        permissionsModel.onContinue = { [weak self] in self?.showFirstRun() }
+        permissionsModel.onContinue = { [weak self] in self?.onboarding.close() }
         onboarding.showPermissions(permissionsModel)
-    }
-
-    private func showFirstRun() {
-        let firstRunModel = AmbientFirstRunModel(chosenEdge: flowBarController?.placement.edge ?? .bottom)
-        firstRunModel.onDockEdgeChosen = { [weak self] edge in
-            print("Intent: dock edge chosen \(edge.rawValue)")
-            self?.flowBarController?.dock(to: edge)
-        }
-        firstRunModel.onFinish = { [weak self] in
-            print("Intent: first run finished")
-            self?.onboarding.close()
-        }
-        onboarding.showFirstRun(firstRunModel)
     }
 }
 
@@ -305,31 +290,12 @@ enum DemoWindowCaptures {
                                                      to: directory.appendingPathComponent("onboarding-gate.png"))
         await DemoCaptureRunner.captureWindowContent(AmbientOnboardingPreview.gate(DemoOnboardingContent.waitingForBrowserGate), size: onboardingSize, appearance: .darkAqua, settleSeconds: 0.4,
                                                      to: directory.appendingPathComponent("onboarding-gate-waiting.png"))
-        let permissionsModel = AmbientPermissionsModel(statuses: [.microphone: .granted, .accessibility: .notYetAsked, .screenRecording: .deniedInSystemSettings])
+        let permissionsModel = AmbientPermissionsModel(statuses: [.microphone: .granted, .accessibility: .notYetAsked, .screenRecording: .deniedInSystemSettings, .speechRecognition: .notYetAsked])
         await DemoCaptureRunner.captureWindowContent(AmbientOnboardingPreview.permissions(permissionsModel), size: onboardingSize, appearance: .darkAqua, settleSeconds: 0.4,
                                                      to: directory.appendingPathComponent("onboarding-permissions.png"))
-        let allGrantedModel = AmbientPermissionsModel(statuses: [.microphone: .granted, .accessibility: .granted, .screenRecording: .granted])
+        let allGrantedModel = AmbientPermissionsModel(statuses: [.microphone: .granted, .accessibility: .granted, .screenRecording: .granted, .speechRecognition: .granted])
         await DemoCaptureRunner.captureWindowContent(AmbientOnboardingPreview.permissions(allGrantedModel), size: onboardingSize, appearance: .darkAqua, settleSeconds: 0.4,
                                                      to: directory.appendingPathComponent("onboarding-permissions-granted.png"))
-
-        let restingFirstRun = AmbientFirstRunModel()
-        await DemoCaptureRunner.captureWindowContent(AmbientOnboardingPreview.firstRun(restingFirstRun), size: onboardingSize, appearance: .darkAqua, settleSeconds: 0.4,
-                                                     to: directory.appendingPathComponent("onboarding-first-run.png"))
-        let heldFirstRun = AmbientFirstRunModel()
-        await DemoCaptureRunner.captureWindowContent(AmbientOnboardingPreview.firstRun(heldFirstRun), size: onboardingSize, appearance: .darkAqua, settleSeconds: 0.9, afterInstall: {
-            heldFirstRun.isShortcutHeld = true
-        }, to: directory.appendingPathComponent("onboarding-first-run-holding.png"))
-        let answeredFirstRun = AmbientFirstRunModel()
-        await DemoCaptureRunner.captureWindowContent(AmbientOnboardingPreview.firstRun(answeredFirstRun), size: onboardingSize, appearance: .darkAqua, settleSeconds: 2.4, afterInstall: {
-            answeredFirstRun.isShortcutHeld = true
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 600_000_000)
-                answeredFirstRun.isShortcutHeld = false
-            }
-        }, to: directory.appendingPathComponent("onboarding-first-run-done.png"))
-        let edgeFirstRun = AmbientFirstRunModel(chosenEdge: .left)
-        await DemoCaptureRunner.captureWindowContent(AmbientOnboardingPreview.firstRun(edgeFirstRun, showingEdgeStep: true), size: onboardingSize, appearance: .darkAqua, settleSeconds: 0.5,
-                                                     to: directory.appendingPathComponent("onboarding-first-run-edge.png"))
 
         for backdrop in DemoBackdrop.allCases {
             let canvasSize = CGSize(width: 360, height: 220)

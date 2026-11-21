@@ -2,6 +2,7 @@ import SwiftUI
 import AVFoundation
 import Combine
 import ServiceManagement
+import Speech
 import AmbientContracts
 import AmbientBackground
 import AmbientUI
@@ -38,10 +39,14 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
     private let shortcutMonitor = GlobalPushToTalkShortcutMonitor()
     private let pointerController = AmbientPointerWindowController()
     private let permissionsModel = AmbientPermissionsModel()
-    private var firstRunModel: AmbientFirstRunModel?
+    private var tourModel: AmbientTourModel?
+    private var tourController: AmbientTourPanelController?
+    /// Checks for newly connected apps while the tour is on its Connectors lesson; the connector service has no push.
+    private var tourConnectorPollingTask: Task<Void, Never>?
+    private var shortcutPressedDate: Date?
+    private var previousRuntimePhase: AmbientRuntimeState.Phase = .idle
     private var permissionTimer: Timer?
     private var recordingStartTask: Task<Void, Never>?
-    private var isShowingPermissions = false
     private var previousPermissionsWereGranted = false
     private var isUpdatingSettings = false
 
@@ -81,7 +86,10 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
             launchesAtLogin: SMAppService.mainApp.status == .enabled
         ))
         model.onCancelTurn = { [weak self] in self?.cancelTurn() }
-        model.onSubmitTypedText = { [weak self] text in self?.submit(text: text) }
+        model.onSubmitTypedText = { [weak self] text in
+            self?.tourModel?.typedRequestSubmitted()
+            self?.submit(text: text)
+        }
         model.onOpenSettings = { [weak self] in self?.openSettings() }
         model.onCancelBackgroundTask = { [weak runtime] identifier in
             guard let runtime else { return }
@@ -96,31 +104,43 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
             self?.openSettings(section: .activity)
         }
         // The panel persists the whole placement, including display and position, before this callback.
-        model.onDockEdgeChanged = { [weak self] edge in self?.settingsModel?.generalSettings.dockEdge = edge }
+        model.onDockEdgeChanged = { [weak self] edge in
+            guard let self else { return }
+            self.settingsModel?.generalSettings.dockEdge = edge
+            self.tourModel?.dockEdgeChanged(to: edge)
+            self.tourController?.barMoved(to: edge, on: self.flowBarController?.dockedScreen)
+        }
         model.onOpenURL = { NSWorkspace.shared.open($0) }
-        runtime.onAgentEvent = { [weak model] event in model?.apply(event) }
+        runtime.onAgentEvent = { [weak self, weak model] event in
+            model?.apply(event)
+            self?.tourModel?.apply(event)
+        }
         runtime.interaction.approvalHandler = { [weak self, weak model] title, detail in
             guard let self, let model else { return false }
             self.showBar()
             let kind: FlowBarApprovalRequest.Kind = title == "Run shell command?" ? .shellCommand
                 : (["Start Codex agent?", "Start Claude agent?", "Start agent?", "Continue agent?"].contains(title) ? .backgroundAgent : .other)
             NSLog("Ambient approval presented: %@", title)
+            self.tourModel?.approvalRequested(kind: kind)
             let allowed = await model.requestApproval(FlowBarApprovalRequest(title: title, detail: detail, kind: kind))
             NSLog("Ambient approval answered: %@", String(allowed))
+            if kind == .backgroundAgent { self.tourModel?.approvalAnswered(isAllowed: allowed) }
             return allowed
         }
         runtime.interaction.cancelApprovalHandler = { [weak model] in model?.returnToIdle() }
         phaseSubscription = runtime.state.$phase.sink { [weak self, weak model] phase in
             guard let self, let model else { return }
+            // Transcribing straight to idle is a recording in which nothing was heard: an empty transcript.
+            if case .transcribing = self.previousRuntimePhase, case .idle = phase { self.tourModel?.heardNothing() }
+            self.previousRuntimePhase = phase
             switch phase {
             case .idle: model.returnToIdle()
             case .listening(let level):
                 if model.turnPhase != .listening { model.beginListening() }
                 model.updateAudioLevel(Double(level))
-                self.firstRunModel?.audioLevel = Double(level)
                 self.showBar()
             case .transcribing: model.beginTranscribing(); self.showBar()
-            case .thinking: model.beginThinking(); self.showBar()
+            case .thinking: model.beginThinking(); self.tourModel?.thinkingStarted(); self.showBar()
             // These arrive verbatim through onAgentEvent, not reconstructed from accumulated state.
             case .working, .responding, .finished, .failed: break
             }
@@ -148,7 +168,7 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
         permissionsModel.onGrant = { [weak self] in self?.grantPermission($0) }
         permissionsModel.onContinue = { [weak self] in self?.continueOnboarding() }
         refreshPermissions()
-        if !UserDefaults.standard.bool(forKey: "ambient.onboardingCompleted") || !permissionsModel.areAllGranted {
+        if !UserDefaults.standard.bool(forKey: "ambient.onboardingCompleted") || !permissionsModel.areRequiredPermissionsGranted {
             showPermissions()
         }
         permissionTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
@@ -167,6 +187,8 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
         let visibility = menu.addItem(withTitle: "Show Bar", action: #selector(toggleBar), keyEquivalent: "")
         visibility.target = self
         visibilityMenuItem = visibility
+        let replayTour = menu.addItem(withTitle: "Replay the Tour", action: #selector(replayTourFromMenu), keyEquivalent: "")
+        replayTour.target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Ambient", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         item.menu = menu
@@ -235,7 +257,7 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
         UserDefaults.standard.set(settings.pushToTalkShortcut.rawValue, forKey: "ambient.pushToTalkShortcut")
         shortcutMonitor.shortcut = settings.pushToTalkShortcut
         flowBarModel?.pushToTalkShortcut = settings.pushToTalkShortcut
-        firstRunModel?.shortcut = settings.pushToTalkShortcut
+        tourModel?.shortcut = settings.pushToTalkShortcut
         if flowBarController?.placement.edge != settings.dockEdge { flowBarController?.dock(to: settings.dockEdge) }
         if settings.launchesAtLogin != (SMAppService.mainApp.status == .enabled) {
             do {
@@ -258,17 +280,28 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
             .accessibility: AmbientPermissionHelper.hasAccessibilityPermission() ? .granted
                 : (UserDefaults.standard.bool(forKey: "ambient.accessibilityRequested") ? .deniedInSystemSettings : .notYetAsked),
             .screenRecording: AmbientPermissionHelper.hasScreenRecordingPermission() ? .granted
-                : (UserDefaults.standard.bool(forKey: "ambient.screenRecordingRequested") ? .deniedInSystemSettings : .notYetAsked)
+                : (UserDefaults.standard.bool(forKey: "ambient.screenRecordingRequested") ? .deniedInSystemSettings : .notYetAsked),
+            .speechRecognition: Self.permissionStatus(forSpeechRecognition: AmbientPermissionHelper.speechRecognitionAuthorizationStatus(),
+                                                      isWaitingForAnswer: permissionsModel.status(of: .speechRecognition) == .waiting)
         ]
         if permissionsModel.status(of: .accessibility) == .granted { shortcutMonitor.start() }
         else { shortcutMonitor.stop() }
-        if previousPermissionsWereGranted && !permissionsModel.areAllGranted { showPermissions() }
-        previousPermissionsWereGranted = permissionsModel.areAllGranted
+        tourModel?.permissionStatusesChanged(permissionsModel.statuses)
+        if previousPermissionsWereGranted && !permissionsModel.areRequiredPermissionsGranted { showPermissions() }
+        previousPermissionsWereGranted = permissionsModel.areRequiredPermissionsGranted
+    }
+
+    static func permissionStatus(forSpeechRecognition authorization: SFSpeechRecognizerAuthorizationStatus, isWaitingForAnswer: Bool) -> AmbientPermissionStatus {
+        switch authorization {
+        case .authorized: return .granted
+        case .notDetermined: return isWaitingForAnswer ? .waiting : .notYetAsked
+        case .denied, .restricted: return .deniedInSystemSettings
+        @unknown default: return .deniedInSystemSettings
+        }
     }
 
     private func showPermissions() {
         guard let runtime else { return }
-        isShowingPermissions = true
         runtime.interaction.onboardingController.showPermissions(permissionsModel)
     }
 
@@ -295,42 +328,84 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
                 UserDefaults.standard.set(true, forKey: "ambient.screenRecordingRequested")
                 AmbientPermissionHelper.requestScreenRecordingPermission()
             }
+        case .speechRecognition:
+            if AmbientPermissionHelper.speechRecognitionAuthorizationStatus() == .notDetermined {
+                permissionsModel.statuses[.speechRecognition] = .waiting
+                Task { _ = await AmbientPermissionHelper.requestSpeechRecognitionPermission(); refreshPermissions() }
+            } else {
+                AmbientPermissionHelper.openSpeechRecognitionSettings()
+            }
         }
         refreshPermissions()
     }
 
     private func continueOnboarding() {
-        isShowingPermissions = false
         guard let runtime else { return }
-        if UserDefaults.standard.bool(forKey: "ambient.onboardingCompleted") {
-            runtime.interaction.onboardingController.close()
-            return
-        }
-        let model = AmbientFirstRunModel(shortcut: settingsModel?.generalSettings.pushToTalkShortcut ?? .controlOption,
-            chosenEdge: flowBarController?.placement.edge ?? .bottom)
-        firstRunModel = model
-        model.onDockEdgeChosen = { [weak self] in self?.flowBarController?.dock(to: $0) }
+        runtime.interaction.onboardingController.close()
+        if !UserDefaults.standard.bool(forKey: "ambient.onboardingCompleted") { startTour() }
+    }
+
+    @objc private func replayTourFromMenu() { startTour() }
+
+    /// The guided tour runs on the real desktop with the real bar; the coach only watches and explains.
+    private func startTour() {
+        guard flowBarController != nil else { return }
+        endTour()
+        showBar()
+        let model = AmbientTourModel(shortcut: shortcutMonitor.shortcut, dockEdge: flowBarController?.placement.edge ?? .bottom)
+        model.permissionStatusesChanged(permissionsModel.statuses)
+        model.onFixPermission = { [weak self] kind in self?.grantPermission(kind) }
+        model.onOpenConnectors = { [weak self] in self?.openSettings(section: .connectors) }
         model.onFinish = { [weak self] in
             UserDefaults.standard.set(true, forKey: "ambient.onboardingCompleted")
-            self?.runtime?.interaction.onboardingController.close()
-            self?.firstRunModel = nil
+            self?.endTour()
         }
-        runtime.interaction.onboardingController.showFirstRun(model)
+        let controller = AmbientTourPanelController(model: model)
+        tourModel = model
+        tourController = controller
+        controller.show(awayFromBarDockedTo: flowBarController?.placement.edge ?? .bottom, on: flowBarController?.dockedScreen)
+        startPollingConnectedAppsDuringTour()
+        NSLog("Ambient tour started")
+    }
+
+    private func endTour() {
+        tourConnectorPollingTask?.cancel()
+        tourConnectorPollingTask = nil
+        tourController?.close()
+        tourController = nil
+        tourModel = nil
+    }
+
+    private func startPollingConnectedAppsDuringTour() {
+        guard let connectorService = runtime?.connectorService else { return }
+        tourConnectorPollingTask = Task { [weak self] in
+            while !Task.isCancelled {
+                if self?.tourModel?.currentLesson == .connectApps {
+                    // An unreachable connector service is not the person's problem to solve in the tour; the
+                    // lesson simply stays open and "Later" moves on.
+                    if let apps = try? await connectorService.apps(matching: "") {
+                        guard !Task.isCancelled else { return }
+                        self?.tourModel?.connectedAppsChanged(names: apps.filter(\.isConnected).map(\.name))
+                    }
+                }
+                try? await Task.sleep(for: .seconds(3))
+            }
+        }
     }
 
     private func handleShortcut(_ transition: AmbientShortcut.ShortcutTransition) {
-        // Practice observes the keys but never sends a practice recording to the agent.
-        if let firstRunModel, runtime?.interaction.onboardingController.onboardingWindow.isVisible == true, !isShowingPermissions {
-            firstRunModel.isShortcutHeld = transition == .pressed
-            return
-        }
         switch transition {
         case .pressed:
+            shortcutPressedDate = Date()
+            // Before the turn is cancelled, so the coach treats the cancelled turn's idle as part of a new hold.
+            tourModel?.shortcutPressed()
             cancelTurn()
             pointerController.hide()
             runtime?.beginListening()
             recordingStartTask = Task { await dictationManager.startRecording() }
         case .released:
+            tourModel?.shortcutReleased(heldFor: shortcutPressedDate.map { Date().timeIntervalSince($0) } ?? 0)
+            shortcutPressedDate = nil
             recordingStartTask?.cancel()
             recordingStartTask = nil
             if !dictationManager.finishRecording(), case .listening = runtime?.state.phase { runtime?.cancelCurrentTurn() }
@@ -372,6 +447,7 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
         backgroundUpdatesTask?.cancel()
         walletTask?.cancel()
         permissionTimer?.invalidate()
+        endTour()
         pointerController.hide()
         flowBarController?.hide()
     }

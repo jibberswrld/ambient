@@ -164,7 +164,7 @@ struct AmbientPermissionsScreen: View {
 
     var body: some View {
         AmbientOnboardingScreenShell(
-            title: "Three things Ambient needs",
+            title: "What Ambient needs",
             bodyText: "Each one is used only when you ask for something. You can change them any time in System Settings."
         ) {
             VStack(spacing: 0) {
@@ -180,7 +180,7 @@ struct AmbientPermissionsScreen: View {
             .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.white.opacity(0.045)))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(AmbientDesign.Palette.onSmokeHairline, lineWidth: 1))
         } footer: {
-            if model.areAllGranted {
+            if model.areRequiredPermissionsGranted {
                 AmbientCapsuleButton(title: "Continue", prominence: .primary) { model.onContinue?() }
                     .keyboardShortcut(.defaultAction)
             } else {
@@ -206,9 +206,19 @@ struct AmbientPermissionRow: View {
                 .frame(width: 30, height: 30)
                 .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.08)))
             VStack(alignment: .leading, spacing: 2) {
-                Text(kind.title)
-                    .font(.system(size: 13.5, weight: .semibold))
-                    .foregroundStyle(AmbientDesign.Palette.onSmokePrimary)
+                HStack(spacing: 7) {
+                    Text(kind.title)
+                        .font(.system(size: 13.5, weight: .semibold))
+                        .foregroundStyle(AmbientDesign.Palette.onSmokePrimary)
+                    if !kind.isRequired {
+                        Text("Optional")
+                            .font(.system(size: 10.5, weight: .medium))
+                            .foregroundStyle(AmbientDesign.Palette.onSmokeTertiary)
+                            .padding(.horizontal, 6)
+                            .frame(height: 16)
+                            .background(Capsule(style: .continuous).strokeBorder(AmbientDesign.Palette.onSmokeHairline, lineWidth: 1))
+                    }
+                }
                 Text(kind.reason)
                     .font(.system(size: 12.5))
                     .foregroundStyle(AmbientDesign.Palette.onSmokeSecondary)
@@ -218,7 +228,7 @@ struct AmbientPermissionRow: View {
             statusControl
         }
         .padding(.horizontal, 14)
-        .frame(height: 62)
+        .frame(height: 56)
         .accessibilityElement(children: .contain)
     }
 
@@ -242,206 +252,5 @@ struct AmbientPermissionRow: View {
         case .deniedInSystemSettings:
             AmbientCapsuleButton(title: "Open Settings", systemImageName: "arrow.up.right", prominence: isTheNextStep ? .primary : .secondary, isCompact: true, action: onGrant)
         }
-    }
-}
-
-// MARK: - First run
-
-struct AmbientFirstRunScreen: View {
-    var model: AmbientFirstRunModel
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        ZStack {
-            switch model.step {
-            case .gesture:
-                AmbientFirstRunGestureStep(model: model)
-                    .transition(stepTransition(movingForward: false))
-            case .edge:
-                AmbientFirstRunEdgeStep(model: model)
-                    .transition(stepTransition(movingForward: true))
-            }
-        }
-        .animation(reduceMotion ? .easeInOut(duration: 0.18) : .spring(response: 0.42, dampingFraction: 1.0), value: model.step)
-    }
-
-    /// Forward slides the next step in from the right; back reverses the same path.
-    private func stepTransition(movingForward: Bool) -> AnyTransition {
-        if reduceMotion { return .opacity }
-        let travel: CGFloat = 36
-        return .asymmetric(
-            insertion: .offset(x: movingForward ? travel : -travel).combined(with: .opacity),
-            removal: .offset(x: movingForward ? travel : -travel).combined(with: .opacity)
-        )
-    }
-}
-
-struct AmbientFirstRunGestureStep: View {
-    var model: AmbientFirstRunModel
-
-    var body: some View {
-        AmbientOnboardingScreenShell(
-            title: "Hold \(model.shortcut.spokenName.replacingOccurrences(of: " + ", with: " and ")), then talk.",
-            bodyText: model.hasCompletedGesture
-                ? "That is all there is to it. Ambient answers in the bar and keeps working in the background."
-                : "Let go when you are done and Ambient gets to work. Try it now."
-        ) {
-            AmbientGesturePracticeStage(model: model)
-        } footer: {
-            if model.hasCompletedGesture {
-                AmbientCapsuleButton(title: "Continue", prominence: .primary) { model.advanceToEdgeStep() }
-                    .keyboardShortcut(.defaultAction)
-            } else {
-                AmbientCapsuleButton(title: "Skip", prominence: .quiet) { model.advanceToEdgeStep() }
-            }
-        }
-    }
-}
-
-/// A miniature desktop with the two keycaps and the real flow bar, which answers the person's practice hold.
-struct AmbientGesturePracticeStage: View {
-    var model: AmbientFirstRunModel
-    @State private var practiceBarModel = FlowBarModel()
-    @State private var practiceReplyTask: Task<Void, Never>?
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    static let stageHeight: CGFloat = 190
-
-    var body: some View {
-        ZStack(alignment: .top) {
-            stageBackground
-            HStack(spacing: 8) {
-                ForEach(model.shortcut.keycapSymbolNames, id: \.self) { symbolName in
-                    AmbientKeycap(systemImageName: symbolName, label: keycapLabel(for: symbolName), size: 40, isPressed: model.isShortcutHeld)
-                }
-            }
-            .padding(.top, 30)
-            .animation(.easeOut(duration: 0.1), value: model.isShortcutHeld)
-            GeometryReader { geometry in
-                FlowBarRootView(model: practiceBarModel)
-                    .onAppear { placePracticeBar(in: geometry.size) }
-                    .onChange(of: geometry.size) { _, newSize in placePracticeBar(in: newSize) }
-            }
-        }
-        .frame(height: Self.stageHeight)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(AmbientDesign.Palette.onSmokeHairline, lineWidth: 1))
-        .onChange(of: model.isShortcutHeld) { _, isHeld in practiceHoldChanged(isHeld: isHeld) }
-        .task(id: model.isShortcutHeld) { await feedPracticeAudioLevelWhileHeld() }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(model.isShortcutHeld ? "Listening" : "Practice area. Hold the keys to try.")
-    }
-
-    private var stageBackground: some View {
-        AmbientOnboardingStageBackground()
-    }
-
-    private func keycapLabel(for symbolName: String) -> String {
-        switch symbolName {
-        case "control": return "control"
-        case "option": return "option"
-        case "command": return "command"
-        default: return ""
-        }
-    }
-
-    private func placePracticeBar(in stageSize: CGSize) {
-        practiceBarModel.dockEdge = .bottom
-        practiceBarModel.showsReplyActions = false
-        practiceBarModel.barAnchorInPanel = CGPoint(x: stageSize.width / 2, y: stageSize.height - 12)
-    }
-
-    private func practiceHoldChanged(isHeld: Bool) {
-        practiceReplyTask?.cancel()
-        if isHeld {
-            practiceBarModel.beginListening()
-            return
-        }
-        practiceBarModel.beginTranscribing()
-        // A real reply would come from the agent; here the bar answers with a short, true line about itself.
-        practiceReplyTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 650_000_000)
-            guard !Task.isCancelled else { return }
-            practiceBarModel.beginThinking()
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            guard !Task.isCancelled else { return }
-            practiceBarModel.finishedReplyLingerDuration = 0
-            practiceBarModel.apply(.textDelta("Got it. Hold the keys whenever you need me."))
-            practiceBarModel.apply(.finished(finalText: "Got it. Hold the keys whenever you need me."))
-        }
-    }
-
-    /// While held, pushes the app's real level when it supplies one, or a soft speech-like motion when it does not.
-    private func feedPracticeAudioLevelWhileHeld() async {
-        guard model.isShortcutHeld else { return }
-        let holdStart = Date()
-        while !Task.isCancelled && model.isShortcutHeld {
-            if let suppliedLevel = model.audioLevel {
-                practiceBarModel.updateAudioLevel(suppliedLevel)
-            } else if !reduceMotion {
-                let elapsedSeconds = Date().timeIntervalSince(holdStart)
-                let syllable = max(0, sin(elapsedSeconds * 2 * .pi * 3.6))
-                practiceBarModel.updateAudioLevel(0.12 + 0.5 * syllable * (0.6 + 0.4 * sin(elapsedSeconds * 1.7)))
-            } else {
-                practiceBarModel.updateAudioLevel(0.35)
-            }
-            try? await Task.sleep(nanoseconds: 22_000_000)
-        }
-    }
-}
-
-struct AmbientFirstRunEdgeStep: View {
-    @Bindable var model: AmbientFirstRunModel
-
-    var body: some View {
-        AmbientOnboardingScreenShell(
-            title: "Where should Ambient live?",
-            bodyText: "Pick an edge of your screen. You can drag the bar to any edge later."
-        ) {
-            HStack(alignment: .center, spacing: 28) {
-                AmbientEdgePicker(selectedEdge: $model.chosenEdge)
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(FlowBarDockEdge.allCases, id: \.self) { edge in
-                        AmbientEdgeChoiceRow(edge: edge, isSelected: edge == model.chosenEdge) { model.chosenEdge = edge }
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        } footer: {
-            AmbientCapsuleButton(title: "Back", prominence: .quiet) { model.returnToGestureStep() }
-            AmbientCapsuleButton(title: "Start using Ambient", prominence: .primary) { model.finish() }
-                .keyboardShortcut(.defaultAction)
-        }
-    }
-}
-
-/// A named edge beside the picture, so the choice can also be made by name (and by VoiceOver).
-private struct AmbientEdgeChoiceRow: View {
-    var edge: FlowBarDockEdge
-    var isSelected: Bool
-    var action: () -> Void
-    @State private var isHovering = false
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 9) {
-                Circle()
-                    .fill(isSelected ? AmbientDesign.Palette.ember : Color.clear)
-                    .overlay(Circle().strokeBorder(isSelected ? Color.clear : AmbientDesign.Palette.onSmokeTertiary, lineWidth: 1.25))
-                    .frame(width: 9, height: 9)
-                Text(edge.displayName)
-                    .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(isSelected ? AmbientDesign.Palette.onSmokePrimary : AmbientDesign.Palette.onSmokeSecondary)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 10)
-            .frame(width: 128, height: 30)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(isHovering ? AmbientDesign.Palette.onSmokeFill : .clear))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(AmbientPressScaleButtonStyle(pressedScale: 0.98))
-        .onHover { hovering in withAnimation(AmbientDesign.Motion.hoverFeedback) { isHovering = hovering } }
-        .ambientPointingHandCursor()
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

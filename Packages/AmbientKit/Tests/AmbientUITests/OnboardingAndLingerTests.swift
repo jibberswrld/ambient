@@ -135,49 +135,15 @@ final class OnboardingModelTests: XCTestCase {
         let permissionsModel = AmbientPermissionsModel(statuses: [.microphone: .granted, .accessibility: .notYetAsked])
         XCTAssertEqual(permissionsModel.status(of: .screenRecording), .notYetAsked, "an unknown status reads as not yet asked")
         XCTAssertEqual(permissionsModel.firstMissingPermission, .accessibility)
-        XCTAssertFalse(permissionsModel.areAllGranted)
+        XCTAssertFalse(permissionsModel.areRequiredPermissionsGranted)
         permissionsModel.statuses[.accessibility] = .granted
         permissionsModel.statuses[.screenRecording] = .granted
-        XCTAssertTrue(permissionsModel.areAllGranted)
-        XCTAssertNil(permissionsModel.firstMissingPermission)
+        XCTAssertTrue(permissionsModel.areRequiredPermissionsGranted, "speech recognition is optional")
+        XCTAssertNil(permissionsModel.firstMissingPermission, "the optional row never carries the ember action")
     }
 
-    func testAHeldAndReleasedShortcutCompletesTheGesture() async throws {
-        let firstRunModel = AmbientFirstRunModel()
-        firstRunModel.isShortcutHeld = true
-        try await Task.sleep(nanoseconds: 400_000_000)
-        firstRunModel.isShortcutHeld = false
-        XCTAssertTrue(firstRunModel.hasCompletedGesture)
-    }
-
-    func testABriefTapDoesNotCountAsTheGesture() {
-        let firstRunModel = AmbientFirstRunModel()
-        firstRunModel.isShortcutHeld = true
-        firstRunModel.isShortcutHeld = false
-        XCTAssertFalse(firstRunModel.hasCompletedGesture, "brushing the keys is not talking to Ambient")
-    }
-
-    func testOnlyTheExactModifierPairMatchesTheShortcut() {
-        XCTAssertTrue(AmbientFirstRunModel.modifierFlags([.control, .option], match: .controlOption))
-        XCTAssertTrue(AmbientFirstRunModel.modifierFlags([.control, .option, .capsLock], match: .controlOption), "caps lock is ignored")
-        XCTAssertFalse(AmbientFirstRunModel.modifierFlags([.control, .option, .shift], match: .controlOption))
-        XCTAssertFalse(AmbientFirstRunModel.modifierFlags([.control], match: .controlOption))
-        XCTAssertTrue(AmbientFirstRunModel.modifierFlags([.option, .command], match: .optionCommand))
-    }
-
-    func testChoosingAnEdgeAndFinishingReachTheApp() {
-        let firstRunModel = AmbientFirstRunModel(chosenEdge: .bottom)
-        var chosenEdges: [FlowBarDockEdge] = []
-        var didFinish = false
-        firstRunModel.onDockEdgeChosen = { chosenEdges.append($0) }
-        firstRunModel.onFinish = { didFinish = true }
-        firstRunModel.advanceToEdgeStep()
-        XCTAssertEqual(firstRunModel.step, .edge)
-        firstRunModel.chosenEdge = .left
-        firstRunModel.chosenEdge = .left
-        XCTAssertEqual(chosenEdges, [.left], "choosing the same edge again is not a change")
-        firstRunModel.finish()
-        XCTAssertTrue(didFinish)
+    func testSpeechRecognitionIsTheOnlyOptionalPermission() {
+        XCTAssertEqual(AmbientPermissionKind.allCases.filter { !$0.isRequired }, [.speechRecognition])
     }
 
     func testGateContentKeepsButtonsInOrder() {
