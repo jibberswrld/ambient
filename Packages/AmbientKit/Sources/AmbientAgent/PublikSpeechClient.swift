@@ -9,7 +9,7 @@ public struct PublikSpeechClient: Sendable {
     }
 
     /// The voice replies are spoken in unless the caller names another.
-    public static let defaultVoice = "ash"
+    public static let defaultVoice = "coral"
 
     /// Returns WAV audio, ready for the app's audio player. publik serves `tts-1` with the voices alloy, ash,
     /// coral, echo, fable, nova, onyx, sage and shimmer (checked 2026-11-21); it has no newer speech model.
