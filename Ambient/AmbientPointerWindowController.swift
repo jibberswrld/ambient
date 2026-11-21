@@ -19,13 +19,13 @@ final class AmbientPointerWindowController {
         NSLog("Ambient pointer shown: %@ at %@ on %@", label, NSStringFromPoint(location), NSStringFromRect(displayFrame))
     }
 
-    /// Drawings stay long enough to follow along, and go when the person starts the next request.
+    /// A drawing has no lifetime: it stays until the person removes it or Ambient draws a new one.
     func show(annotations: [AmbientScreenAnnotation], displayFrame: CGRect) {
-        present(AmbientAnnotationOverlayView(annotations: annotations), displayFrame: displayFrame, lifetime: .seconds(45))
+        present(AmbientAnnotationOverlayView(annotations: annotations), displayFrame: displayFrame, lifetime: nil)
         NSLog("Ambient drawing shown: %ld annotations on %@", annotations.count, NSStringFromRect(displayFrame))
     }
 
-    private func present(_ content: some View, displayFrame: CGRect, lifetime: Duration) {
+    private func present(_ content: some View, displayFrame: CGRect, lifetime: Duration?) {
         hide()
         let window = NSPanel(contentRect: displayFrame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         window.isOpaque = false
@@ -39,12 +39,15 @@ final class AmbientPointerWindowController {
         window.contentView = hostingView
         self.window = window
         window.orderFrontRegardless()
+        guard let lifetime else { return }
         removalTask = Task { [weak self] in
             try? await Task.sleep(for: lifetime)
             guard !Task.isCancelled else { return }
             self?.hide()
         }
     }
+
+    var isShowing: Bool { window != nil }
 
     func hide() {
         removalTask?.cancel()

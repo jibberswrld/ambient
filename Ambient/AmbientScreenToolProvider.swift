@@ -6,11 +6,13 @@ import AmbientUI
 final class AmbientScreenToolProvider: ToolProvider {
     var pointHandler: ((CGPoint, CGRect, String) -> Void)?
     var drawHandler: (([AmbientScreenAnnotation], CGRect) -> Void)?
+    /// Removes the drawing; false when nothing was drawn.
+    var clearDrawingHandler: (() -> Bool)?
     private(set) var captures: [AmbientScreenCapture] = []
 
     func clearCaptures() { captures = [] }
     func tools() async -> [any AmbientTool] {
-        [ScreenTool(provider: self, isPointing: false), ScreenTool(provider: self, isPointing: true), DrawTool(provider: self)]
+        [ScreenTool(provider: self, isPointing: false), ScreenTool(provider: self, isPointing: true), DrawTool(provider: self), ClearDrawingTool(provider: self)]
     }
     func systemPromptSection() async -> String? {
         """
@@ -22,7 +24,8 @@ final class AmbientScreenToolProvider: ToolProvider {
         draw_on_screen once with every mark for the steps that are visible now (box or circle the control,
         arrow to it, a caption of a few words each, in the order to do them), and say the steps in a sentence
         or two. Draw only what is in the capture. If later steps are on a screen that is not open yet, say
-        so and continue from a new capture when the person asks. The drawing stays until their next request.
+        so and continue from a new capture when the person asks. A drawing stays on screen until the person
+        removes it or you draw a new one; when they ask to remove, clear or erase it, call clear_drawing.
         look_at_screen labels every display with a 1-based display_index and its screenshot pixel size.
         point_at uses that index from the most recent capture in this turn, x and y in those screenshot
         pixels (origin top-left, x rightward, y downward), and a short label. It only points; it never clicks.
@@ -148,7 +151,7 @@ extension AmbientScreenToolProvider {
         // The shapes are Ambient's own output, logged so a wrong drawing can be diagnosed afterwards.
         NSLog("Ambient drawing: %@", String(describing: annotations))
         drawHandler(annotations, capture.displayFrame)
-        return ToolResult(content: "Drew \(annotations.count) annotations on display \(Int(displayIndex)). They stay until the person's next request.")
+        return ToolResult(content: "Drew \(annotations.count) annotations on display \(Int(displayIndex)). They stay until the person asks to remove them.")
     }
 }
 
@@ -184,6 +187,19 @@ private struct DrawTool: AmbientTool {
     }
     func activityLabel(arguments: JSONValue) -> String? { "Drawing on screen" }
     func run(arguments: JSONValue) async -> ToolResult { await provider.draw(arguments: arguments) }
+}
+
+private struct ClearDrawingTool: AmbientTool {
+    let provider: AmbientScreenToolProvider
+    var definition: ToolDefinition {
+        ToolDefinition(name: "clear_drawing", description: "Remove the drawing from the person's screen. Use only when they ask to remove, clear or erase it.",
+            parametersJSONSchema: .object(["type": .string("object"), "properties": .object([:]), "additionalProperties": .bool(false)]))
+    }
+    func activityLabel(arguments: JSONValue) -> String? { "Clearing the drawing" }
+    func run(arguments: JSONValue) async -> ToolResult {
+        let removed = await provider.clearDrawingHandler?() ?? false
+        return ToolResult(content: removed ? "The drawing is removed." : "There was no drawing on screen.")
+    }
 }
 
 private struct ScreenTool: AmbientTool {

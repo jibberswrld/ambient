@@ -38,6 +38,8 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
     private let dictationManager = AmbientDictationManager()
     private let shortcutMonitor = GlobalPushToTalkShortcutMonitor()
     private let pointerController = AmbientPointerWindowController()
+    /// Drawings get their own window so pointing, or the next request, never takes one away.
+    private let drawingController = AmbientPointerWindowController()
     private let permissionsModel = AmbientPermissionsModel()
     private var tourModel: AmbientTourModel?
     private var tourController: AmbientTourPanelController?
@@ -149,7 +151,12 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
             self?.pointerController.show(at: location, displayFrame: frame, label: label)
         }
         runtime.screenTools.drawHandler = { [weak self] annotations, frame in
-            self?.pointerController.show(annotations: annotations, displayFrame: frame)
+            self?.drawingController.show(annotations: annotations, displayFrame: frame)
+        }
+        runtime.screenTools.clearDrawingHandler = { [weak self] in
+            guard let self, self.drawingController.isShowing else { return false }
+            self.drawingController.hide()
+            return true
         }
         dictationManager.audioLevelChanged = { [weak runtime] in runtime?.updateAudioLevel($0) }
         dictationManager.recordingFinished = { [weak runtime] in runtime?.submit(recordedWAV: $0) }
@@ -189,11 +196,15 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
         visibilityMenuItem = visibility
         let replayTour = menu.addItem(withTitle: "Replay the Tour", action: #selector(replayTourFromMenu), keyEquivalent: "")
         replayTour.target = self
+        let clearDrawing = menu.addItem(withTitle: "Clear Drawing", action: #selector(clearDrawingFromMenu), keyEquivalent: "")
+        clearDrawing.target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Ambient", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         item.menu = menu
         statusItem = item
     }
+
+    @objc private func clearDrawingFromMenu() { drawingController.hide() }
 
     private func showBar() {
         flowBarController?.show()
@@ -449,6 +460,7 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
         permissionTimer?.invalidate()
         endTour()
         pointerController.hide()
+        drawingController.hide()
         flowBarController?.hide()
     }
 }
