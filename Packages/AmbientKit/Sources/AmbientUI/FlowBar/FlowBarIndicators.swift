@@ -44,10 +44,11 @@ struct FlowBarWaveformView: View {
 
     /// A warm glow behind the bars that brightens with the voice: the ember responding to being spoken to.
     private func drawGlow(in context: inout GraphicsContext, canvasSize: CGSize) {
-        let glowStrength = mode == .transcribing ? 0.18 : 0.14 + 0.55 * dynamics.smoothedLevel
+        // Kept faint: ember at high alpha over smoke turns muddy brown. The glow is a hint of warmth, not a blob.
+        let glowStrength = mode == .transcribing ? 0.06 : 0.05 + 0.22 * dynamics.smoothedLevel
         let centre = CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2)
-        let glowRadius = max(canvasSize.width, canvasSize.height) * 0.55
-        let glowRect = CGRect(x: centre.x - glowRadius, y: centre.y - glowRadius, width: glowRadius * 2, height: glowRadius * 2)
+        let glowRadius = min(canvasSize.width, canvasSize.height) * 0.9
+        let glowRect = CGRect(x: centre.x - glowRadius * 1.6, y: centre.y - glowRadius, width: glowRadius * 3.2, height: glowRadius * 2)
         context.fill(
             Ellipse().path(in: glowRect),
             with: .radialGradient(
@@ -121,9 +122,14 @@ final class FlowBarWaveformDynamics {
         for barIndex in barLengths.indices {
             let targetLength: Double
             if isTranscribing {
-                // The voice has stopped; a low ripple travels across the bars while the words are read back.
-                let ripple = reduceMotion ? 0.5 : 0.5 + 0.5 * sin(time * 5.2 - Double(barIndex) * 0.62)
-                targetLength = Self.restingLength + 0.16 * ripple
+                // The voice has stopped: a single bright swell sweeps across the dots while the words are read back,
+                // so "working on what you said" looks different from "listening to silence".
+                let sweepPeriod = 0.9
+                let sweepPosition = reduceMotion ? 0.5 : (time / sweepPeriod).truncatingRemainder(dividingBy: 1) * 1.4 - 0.2
+                let barPosition = Double(barIndex) / Double(max(barLengths.count - 1, 1))
+                let distanceFromSweep = (barPosition - sweepPosition) / 0.14
+                let swell = exp(-distanceFromSweep * distanceFromSweep)
+                targetLength = Self.restingLength + 0.34 * swell
             } else {
                 let variation = reduceMotion ? 1 : 0.62 + 0.38 * (0.5 + 0.5 * sin(time * wobbleFrequencies[barIndex] + wobblePhases[barIndex]))
                 let drive = min(1, smoothedLevel * centreEmphasis[barIndex] * variation * 1.35)

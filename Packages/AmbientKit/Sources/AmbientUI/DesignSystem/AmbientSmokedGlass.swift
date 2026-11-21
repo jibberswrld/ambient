@@ -87,7 +87,7 @@ struct AmbientSmokedGlassBackground: View {
             case .snapshot(let backdrop):
                 SnapshotBackdropFill(backdrop: backdrop)
                     .clipShape(shape)
-                    .overlay(shape.fill(AmbientDesign.Palette.smoke.opacity(isRaisedCard ? 0.66 : 0.58)))
+                    .overlay(shape.fill(AmbientDesign.Palette.smoke.opacity(smokeDensity)))
             case .live:
                 liveMaterial
             }
@@ -99,17 +99,25 @@ struct AmbientSmokedGlassBackground: View {
         if #available(macOS 26, *) {
             // Liquid Glass, tinted toward warm graphite so white text reads over any desktop.
             Color.clear
-                .glassEffect(.regular.tint(AmbientDesign.Palette.smoke.opacity(isRaisedCard ? 0.62 : 0.52)), in: shape)
+                .glassEffect(.regular.tint(AmbientDesign.Palette.smoke.opacity(smokeDensity)), in: shape)
         } else {
             BehindWindowBlurView()
                 .clipShape(shape)
-                .overlay(shape.fill(AmbientDesign.Palette.smoke.opacity(isRaisedCard ? 0.5 : 0.42)))
+                .overlay(shape.fill(AmbientDesign.Palette.smoke.opacity(smokeDensity - 0.12)))
         }
     }
 
+    /// How much smoke is in the glass. Dense enough that the bar reads as one dark object over a white page (thin
+    /// smoke over white turns to flat grey), thin enough that the desktop's colour still shows through. Cards are
+    /// denser than pills because they carry paragraphs.
+    private var smokeDensity: Double { isRaisedCard ? 0.80 : 0.72 }
+
+    /// The rim: brighter on pills so the tiny resting bar is always findable, like a lit edge of glass.
     private var rimLightGradient: LinearGradient {
-        LinearGradient(
-            colors: [Color.white.opacity(isIncreasedContrast ? 0.55 : 0.22), Color.white.opacity(isIncreasedContrast ? 0.35 : 0.05)],
+        let topOpacity = isIncreasedContrast ? 0.6 : (isRaisedCard ? 0.20 : 0.32)
+        let bottomOpacity = isIncreasedContrast ? 0.4 : (isRaisedCard ? 0.06 : 0.12)
+        return LinearGradient(
+            colors: [Color.white.opacity(topOpacity), Color.white.opacity(bottomOpacity)],
             startPoint: .top,
             endPoint: .bottom
         )

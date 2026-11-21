@@ -9,15 +9,9 @@ import SwiftUI
 @MainActor
 public enum AmbientSnapshotRenderer {
 
-    /// The flow bar docked to the middle of `edge` on a canvas filled with `backdrop`.
-    public static func renderFlowBar(
-        model: FlowBarModel,
-        edge: FlowBarDockEdge,
-        canvasSize: CGSize,
-        backdrop: NSImage,
-        forcesIncreasedContrast: Bool = false,
-        scale: CGFloat = 2
-    ) -> NSImage? {
+    /// The flow bar docked to the middle of `edge` on a canvas filled with `backdrop`, as a view. Host it in an
+    /// off-screen window to capture it with text fields and scroll views drawn for real.
+    public static func flowBarCanvas(model: FlowBarModel, edge: FlowBarDockEdge, canvasSize: CGSize, backdrop: NSImage, forcesIncreasedContrast: Bool = false) -> some View {
         model.revealsReplyInstantly = true
         model.dockEdge = edge
         model.draggedBarCentreInPanel = nil
@@ -25,7 +19,7 @@ public enum AmbientSnapshotRenderer {
 
         let backdropFillingCanvas = scaledToFill(backdrop, canvasSize: canvasSize)
         let snapshotBackdrop = AmbientSnapshotBackdrop(blurredImage: blurred(backdropFillingCanvas, radius: 26), canvasSize: canvasSize)
-        let canvas = ZStack(alignment: .topLeading) {
+        return ZStack(alignment: .topLeading) {
             Image(nsImage: backdropFillingCanvas)
                 .resizable()
                 .frame(width: canvasSize.width, height: canvasSize.height)
@@ -35,8 +29,11 @@ public enum AmbientSnapshotRenderer {
         .frame(width: canvasSize.width, height: canvasSize.height)
         .environment(\.ambientSurfaceRenderingMode, .snapshot(snapshotBackdrop))
         .environment(\.ambientForcesIncreasedContrast, forcesIncreasedContrast)
+    }
 
-        let renderer = ImageRenderer(content: canvas)
+    /// The same canvas rendered straight to an image. Quick, but text fields and scroll views draw as placeholders.
+    public static func renderFlowBar(model: FlowBarModel, edge: FlowBarDockEdge, canvasSize: CGSize, backdrop: NSImage, forcesIncreasedContrast: Bool = false, scale: CGFloat = 2) -> NSImage? {
+        let renderer = ImageRenderer(content: flowBarCanvas(model: model, edge: edge, canvasSize: canvasSize, backdrop: backdrop, forcesIncreasedContrast: forcesIncreasedContrast))
         renderer.scale = scale
         return renderer.nsImage
     }

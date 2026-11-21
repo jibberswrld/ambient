@@ -11,13 +11,16 @@ struct FlowBarReplyCard: View {
 
     var body: some View {
         let isStreaming = model.isReplyStillStreaming
-        FlowBarCardStack(maximumWidth: cardContentMaximumWidth, spacing: 12) {
+        let showsFooter = isStreaming || model.showsReplyActions
+        FlowBarCardStack(maximumWidth: cardContentMaximumWidth, minimumWidth: showsFooter ? 236 : 0, spacing: 10) {
             FlowBarReplyBody(markdownText: model.displayedReplyText, isStreaming: isStreaming)
-            footer(isStreaming: isStreaming)
-                .stretchesToCardWidth()
+            if showsFooter {
+                footer(isStreaming: isStreaming)
+                    .stretchesToCardWidth()
+            }
         }
         .padding(AmbientDesign.Metrics.cardPadding)
-        .padding(.bottom, -4)
+        .padding(.bottom, showsFooter ? -5 : 0)
         .environment(\.openURL, OpenURLAction { url in
             model.onOpenURL(url)
             return .handled
@@ -50,7 +53,7 @@ struct FlowBarReplyCard: View {
                 AmbientGlassIconButton(systemImageName: "xmark", accessibilityLabelText: "Dismiss", diameter: 26, symbolPointSize: 10) { model.dismissReplyOrError() }
             }
         }
-        .frame(height: 28)
+        .frame(height: 26)
         .padding(.horizontal, -6)
     }
 }
@@ -73,7 +76,7 @@ struct FlowBarReplyBody: View {
                         }
                     }
                     .scrollIndicators(.automatic)
-                    .mask(scrollEdgeFade)
+                    .mask(scrollEdgeFade(fadesTopEdge: isStreaming))
                     .onChange(of: markdownText) {
                         if isStreaming { scrollProxy.scrollTo("end-of-reply", anchor: .bottom) }
                     }
@@ -88,12 +91,10 @@ struct FlowBarReplyBody: View {
             .textSelection(.enabled)
     }
 
-    /// Text dissolves at the top edge where it scrolls under, instead of being cut by a hard line.
-    private var scrollEdgeFade: some View {
-        VStack(spacing: 0) {
-            LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom).frame(height: 14)
-            Color.black
-        }
+    /// Text dissolves at the edge where more of it is hidden instead of being cut by a hard line: the top while
+    /// streaming (the view follows the newest line), the bottom once finished (more to read below).
+    private func scrollEdgeFade(fadesTopEdge: Bool) -> some View {
+        AmbientScrollEdgeFade(fadesTopEdge: fadesTopEdge, fadesBottomEdge: !fadesTopEdge)
     }
 }
 
@@ -171,7 +172,7 @@ struct FlowBarApprovalCard: View {
             }
         }
         .padding(AmbientDesign.Metrics.cardPadding)
-        .frame(width: 356)
+        .frame(width: AmbientDesign.Metrics.cardMaximumWidth)
     }
 
     private func detailText(_ request: FlowBarApprovalRequest) -> some View {
@@ -191,6 +192,25 @@ struct FlowBarApprovalCard: View {
         case .shellCommand: return "terminal"
         case .backgroundAgent: return "cpu"
         case .other: return "hand.raised"
+        }
+    }
+}
+
+/// A mask that fades content out over a short distance at the top, the bottom, or both.
+struct AmbientScrollEdgeFade: View {
+    var fadesTopEdge: Bool
+    var fadesBottomEdge: Bool
+    var fadeLength: CGFloat = 16
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if fadesTopEdge {
+                LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom).frame(height: fadeLength)
+            }
+            Color.black
+            if fadesBottomEdge {
+                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: fadeLength)
+            }
         }
     }
 }

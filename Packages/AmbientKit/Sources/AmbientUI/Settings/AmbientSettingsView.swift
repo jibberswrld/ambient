@@ -233,9 +233,11 @@ struct AmbientSwitchRow: View {
 
     var body: some View {
         AmbientSettingsRow(title: title, detail: detail) {
-            Toggle(title, isOn: $isOn)
-                .labelsHidden()
+            // The row already shows the title; the custom style would draw the label a second time, so the toggle
+            // gets an empty label and carries the title for VoiceOver instead.
+            Toggle(isOn: $isOn) { EmptyView() }
                 .toggleStyle(AmbientSwitchToggleStyle())
+                .accessibilityLabel(title)
         }
     }
 }

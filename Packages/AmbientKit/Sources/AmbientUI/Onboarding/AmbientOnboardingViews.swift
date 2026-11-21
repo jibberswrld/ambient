@@ -71,7 +71,19 @@ struct AmbientGateScreen: View {
 
     var body: some View {
         AmbientOnboardingScreenShell(title: content.title, bodyText: content.bodyText) {
-            if let note = content.note {
+            VStack(alignment: .leading, spacing: 16) {
+                AmbientGateHeroStage()
+                gateNote
+            }
+        } footer: {
+            gateButtons
+        }
+        .animation(.easeOut(duration: 0.2), value: content)
+    }
+
+    @ViewBuilder
+    private var gateNote: some View {
+        if let note = content.note {
                 HStack(spacing: 8) {
                     if content.isWaiting {
                         AmbientEmberIndicator(activity: .thinking, diameter: 12)
@@ -82,8 +94,11 @@ struct AmbientGateScreen: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .transition(.opacity)
-            }
-        } footer: {
+        }
+    }
+
+    @ViewBuilder
+    private var gateButtons: some View {
             ForEach(content.buttons) { gateButton in
                 let button = AmbientCapsuleButton(title: gateButton.label, prominence: capsuleProminence(gateButton.prominence)) {
                     onButtonPressed(gateButton.actionID)
@@ -94,8 +109,6 @@ struct AmbientGateScreen: View {
                     button
                 }
             }
-        }
-        .animation(.easeOut(duration: 0.2), value: content)
     }
 
     private func capsuleProminence(_ prominence: AmbientGateButton.Prominence) -> AmbientCapsuleButton.Prominence {
@@ -103,6 +116,43 @@ struct AmbientGateScreen: View {
         case .primary: return .primary
         case .secondary: return .secondary
         case .quiet: return .quiet
+        }
+    }
+}
+
+/// The gate's picture: a miniature desktop with the real bar resting on it, showing what the person is
+/// signing in to before they have it.
+struct AmbientGateHeroStage: View {
+    @State private var heroBarModel = FlowBarModel()
+
+    var body: some View {
+        GeometryReader { geometry in
+            FlowBarRootView(model: heroBarModel)
+                .onAppear { placeHeroBar(in: geometry.size) }
+                .onChange(of: geometry.size) { _, newSize in placeHeroBar(in: newSize) }
+        }
+        .frame(height: 150)
+        .background(AmbientOnboardingStageBackground())
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(AmbientDesign.Palette.onSmokeHairline, lineWidth: 1))
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private func placeHeroBar(in stageSize: CGSize) {
+        heroBarModel.dockEdge = .bottom
+        heroBarModel.barAnchorInPanel = CGPoint(x: stageSize.width / 2, y: stageSize.height - 14)
+        heroBarModel.pinHoverForPreview(true)
+    }
+}
+
+/// The miniature desktop behind the onboarding pictures: a dusk wallpaper, so the smoked glass has colour to sit on.
+struct AmbientOnboardingStageBackground: View {
+    var body: some View {
+        ZStack {
+            LinearGradient(colors: [Color(red: 0.17, green: 0.15, blue: 0.20), Color(red: 0.09, green: 0.085, blue: 0.10)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            RadialGradient(colors: [Color(red: 0.42, green: 0.30, blue: 0.55).opacity(0.35), .clear], center: UnitPoint(x: 0.8, y: 1.0), startRadius: 0, endRadius: 260)
+            RadialGradient(colors: [AmbientDesign.Palette.ember.opacity(0.10), .clear], center: UnitPoint(x: 0.15, y: 0.0), startRadius: 0, endRadius: 200)
         }
     }
 }
@@ -283,10 +333,7 @@ struct AmbientGesturePracticeStage: View {
     }
 
     private var stageBackground: some View {
-        ZStack {
-            LinearGradient(colors: [Color(red: 0.17, green: 0.15, blue: 0.20), Color(red: 0.09, green: 0.085, blue: 0.10)], startPoint: .topLeading, endPoint: .bottomTrailing)
-            RadialGradient(colors: [Color(red: 0.42, green: 0.30, blue: 0.55).opacity(0.35), .clear], center: UnitPoint(x: 0.8, y: 1.0), startRadius: 0, endRadius: 260)
-        }
+        AmbientOnboardingStageBackground()
     }
 
     private func keycapLabel(for symbolName: String) -> String {
@@ -300,6 +347,7 @@ struct AmbientGesturePracticeStage: View {
 
     private func placePracticeBar(in stageSize: CGSize) {
         practiceBarModel.dockEdge = .bottom
+        practiceBarModel.showsReplyActions = false
         practiceBarModel.barAnchorInPanel = CGPoint(x: stageSize.width / 2, y: stageSize.height - 12)
     }
 

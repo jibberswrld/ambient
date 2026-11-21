@@ -48,7 +48,8 @@ struct FlowBarTaskTrayCard: View {
             AmbientProposalLimit(maximumHeight: 330) {
                 ViewThatFits(in: .vertical) {
                     rows
-                    ScrollView(.vertical) { rows }
+                    ScrollView(.vertical) { rows.padding(.bottom, 10) }
+                        .mask(AmbientScrollEdgeFade(fadesTopEdge: false, fadesBottomEdge: true))
                 }
             }
         }

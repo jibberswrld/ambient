@@ -151,6 +151,8 @@ public final class FlowBarModel {
     public internal(set) var isPointerHovering = false
     /// Hovering the working pill reveals the steps taken so far.
     var isShowingToolCallTrail = false
+    /// Copy, Reply and Dismiss under a finished answer. Off for the onboarding practice bar, where they mean nothing.
+    var showsReplyActions = true
 
     // MARK: Placement (owned by the panel controller)
 

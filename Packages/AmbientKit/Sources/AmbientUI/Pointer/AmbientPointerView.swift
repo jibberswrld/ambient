@@ -54,8 +54,7 @@ public struct AmbientPointerView: View {
             if let label, hasArrived {
                 AmbientPointerLabel(text: label)
                     .fixedSize()
-                    .alignmentGuide(labelAlignment.horizontal) { dimensions in labelHorizontalGuide(dimensions) }
-                    .alignmentGuide(labelAlignment.vertical) { dimensions in labelVerticalGuide(dimensions) }
+                    .offset(labelOffset)
                     .transition(labelTransition)
             }
         }
@@ -82,26 +81,23 @@ public struct AmbientPointerView: View {
     private var isTrailing: Bool { labelPlacement == .trailingBelow || labelPlacement == .trailingAbove }
     private var isBelow: Bool { labelPlacement == .trailingBelow || labelPlacement == .leadingBelow }
 
+    /// The label hangs off the corner of the footprint on its side...
     private var labelAlignment: Alignment {
         switch labelPlacement {
-        case .trailingBelow: return .bottomTrailing
-        case .trailingAbove: return .topTrailing
-        case .leadingBelow: return .bottomLeading
-        case .leadingAbove: return .topLeading
+        case .trailingBelow: return .topLeading
+        case .trailingAbove: return .bottomLeading
+        case .leadingBelow: return .topTrailing
+        case .leadingAbove: return .bottomTrailing
         }
     }
 
-    /// Puts the label's near edge just past the ring, diagonally from the point.
-    private func labelHorizontalGuide(_ dimensions: ViewDimensions) -> CGFloat {
-        let gapFromCentre: CGFloat = 10
-        let inset = Self.footprint / 2 - gapFromCentre
-        return isTrailing ? dimensions[.leading] + inset : dimensions[.trailing] - inset
-    }
-
-    private func labelVerticalGuide(_ dimensions: ViewDimensions) -> CGFloat {
-        let gapFromCentre: CGFloat = 12
-        let inset = Self.footprint / 2 - gapFromCentre
-        return isBelow ? dimensions[.top] + inset : dimensions[.bottom] - inset
+    /// ...and is moved so its near corner sits just past the ring, diagonally from the point. Offsets never change
+    /// layout, so the view's centre stays exactly on the target.
+    private var labelOffset: CGSize {
+        let horizontalDistanceFromCorner = Self.footprint / 2 + 10
+        let verticalDistanceFromCorner = Self.footprint / 2 + 9
+        return CGSize(width: isTrailing ? horizontalDistanceFromCorner : -horizontalDistanceFromCorner,
+                      height: isBelow ? verticalDistanceFromCorner : -verticalDistanceFromCorner)
     }
 }
 
@@ -124,7 +120,7 @@ private struct AmbientPointerHalo: View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !isBreathing)) { timeline in
             let breath = isBreathing ? 0.5 + 0.5 * sin(timeline.date.timeIntervalSinceReferenceDate * 2 * .pi / 1.8) : 0.6
             Circle()
-                .fill(RadialGradient(colors: [AmbientDesign.Palette.ember.opacity(0.42 + 0.14 * breath), AmbientDesign.Palette.ember.opacity(0)], center: .center, startRadius: 2, endRadius: 22))
+                .fill(RadialGradient(colors: [AmbientDesign.Palette.ember.opacity(0.22 + 0.10 * breath), AmbientDesign.Palette.ember.opacity(0)], center: .center, startRadius: 4, endRadius: 21))
                 .frame(width: 44, height: 44)
         }
     }

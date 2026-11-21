@@ -85,6 +85,8 @@ extension View {
 /// maximum width. Children marked `stretchesToCardWidth()` take whatever width the others settled on.
 struct FlowBarCardStack: Layout {
     var maximumWidth: CGFloat
+    /// A floor so a three-word reply still has room for its footer without crowding it.
+    var minimumWidth: CGFloat = 0
     var spacing: CGFloat
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
@@ -114,7 +116,7 @@ struct FlowBarCardStack: Layout {
                 widestContent = max(widestContent, subview.sizeThatFits(ProposedViewSize(width: availableWidth, height: nil)).width)
             }
         }
-        return min(widestContent, availableWidth)
+        return min(max(widestContent, minimumWidth), availableWidth)
     }
 }
 

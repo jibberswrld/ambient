@@ -93,36 +93,35 @@ enum DemoCaptureRunner {
                     if DemoScenarioDirector.needsAsyncSettle(state) {
                         try? await Task.sleep(nanoseconds: 30_000_000)
                     }
-                    write(model: model, edge: edge, canvasSize: canvasSize, backdropImage: backdropImage, forcesIncreasedContrast: false,
-                          to: directory.appendingPathComponent("flowbar-\(edge.rawValue)-\(backdrop.rawValue)-\(state.rawValue).png"))
+                    await write(model: model, edge: edge, canvasSize: canvasSize, backdropImage: backdropImage, forcesIncreasedContrast: false,
+                                to: directory.appendingPathComponent("flowbar-\(edge.rawValue)-\(backdrop.rawValue)-\(state.rawValue).png"))
                 }
                 if includeIncreasedContrast {
                     for state in [DemoFlowBarState.hovering, .reply, .working] {
                         let model = FlowBarModel()
                         model.revealsReplyInstantly = true
                         DemoScenarioDirector.apply(state, to: model)
-                        write(model: model, edge: edge, canvasSize: canvasSize, backdropImage: backdropImage, forcesIncreasedContrast: true,
-                              to: directory.appendingPathComponent("flowbar-\(edge.rawValue)-\(backdrop.rawValue)-\(state.rawValue)-contrast.png"))
+                        await write(model: model, edge: edge, canvasSize: canvasSize, backdropImage: backdropImage, forcesIncreasedContrast: true,
+                                    to: directory.appendingPathComponent("flowbar-\(edge.rawValue)-\(backdrop.rawValue)-\(state.rawValue)-contrast.png"))
                     }
                 }
             }
         }
     }
 
-    private static func write(model: FlowBarModel, edge: FlowBarDockEdge, canvasSize: CGSize, backdropImage: NSImage, forcesIncreasedContrast: Bool, to fileURL: URL) {
-        guard let rendered = AmbientSnapshotRenderer.renderFlowBar(model: model, edge: edge, canvasSize: canvasSize, backdrop: backdropImage, forcesIncreasedContrast: forcesIncreasedContrast),
-              let pngData = AmbientSnapshotRenderer.pngData(from: rendered)
-        else {
-            print("Could not render \(fileURL.lastPathComponent)")
-            return
-        }
-        try? pngData.write(to: fileURL)
+    /// Renders through an off-screen window rather than ImageRenderer, because ImageRenderer cannot draw AppKit-backed
+    /// pieces (the text field, scroll views) and the bar uses both.
+    private static func write(model: FlowBarModel, edge: FlowBarDockEdge, canvasSize: CGSize, backdropImage: NSImage, forcesIncreasedContrast: Bool, to fileURL: URL) async {
+        let canvas = AmbientSnapshotRenderer.flowBarCanvas(model: model, edge: edge, canvasSize: canvasSize, backdrop: backdropImage, forcesIncreasedContrast: forcesIncreasedContrast)
+        await captureWindowContent(canvas, size: canvasSize, appearance: .darkAqua, settleSeconds: 0.25, to: fileURL)
     }
 
     /// Renders a window's SwiftUI content to PNG in an off-screen window, so AppKit-backed controls (text fields,
     /// scroll views) draw for real. The window is placed far outside every display and never ordered front.
     static func captureWindowContent<Content: View>(_ content: Content, size: CGSize, appearance: NSAppearance.Name, settleSeconds: Double, afterInstall: () -> Void = {}, to fileURL: URL) async {
         let offscreenWindow = NSWindow(contentRect: CGRect(origin: CGPoint(x: -20_000, y: -20_000), size: size), styleMask: [.borderless], backing: .buffered, defer: false)
+        // Created in code, so it must not release itself on close: ARC owns it, and a double release crashes.
+        offscreenWindow.isReleasedWhenClosed = false
         offscreenWindow.appearance = NSAppearance(named: appearance)
         let hostingView = NSHostingView(rootView: content.frame(width: size.width, height: size.height))
         hostingView.frame = CGRect(origin: .zero, size: size)
