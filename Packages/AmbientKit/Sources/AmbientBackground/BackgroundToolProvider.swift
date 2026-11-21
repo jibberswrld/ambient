@@ -152,7 +152,7 @@ private struct BackgroundTool: AmbientTool {
                 let kindName = try text("kind", arguments)
                 guard kindName == "codex" || kindName == "claude" else { throw BackgroundExecutionError.message("kind must be codex or claude.") }
                 let prompt = try text("prompt", arguments)
-                guard await approved("Start \(kindName) agent?", detail: "\(prompt)\nDirectory: \(arguments["working_directory"]?.stringValue ?? "new Ambient workspace")") else { return denied() }
+                guard await approved("Start \(kindName == "codex" ? "Codex" : "Claude") agent?", detail: "\(prompt)\nDirectory: \(arguments["working_directory"]?.stringValue ?? "new Ambient workspace")") else { return denied() }
                 return taskResult(try await manager.spawnAgent(kind: kindName == "codex" ? .codexAgent : .claudeAgent,
                     prompt: prompt, workingDirectory: arguments["working_directory"]?.stringValue,
                     title: try text("title", arguments), model: arguments["model"]?.stringValue))

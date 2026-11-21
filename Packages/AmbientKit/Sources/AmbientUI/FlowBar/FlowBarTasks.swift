@@ -171,10 +171,16 @@ struct FlowBarTaskRow: View {
     private var detailText: String {
         switch backgroundTask.status {
         case .running: return backgroundTask.latestActivity
-        case .succeeded: return backgroundTask.result ?? backgroundTask.latestActivity
-        case .failed: return backgroundTask.result ?? "It stopped with an error."
+        case .succeeded: return backgroundTask.result.map(Self.plainText) ?? backgroundTask.latestActivity
+        case .failed: return backgroundTask.result.map(Self.plainText) ?? "It stopped with an error."
         case .cancelled: return "Stopped."
         }
+    }
+
+    /// Agents answer in markdown. The row has room for a few plain lines, so links and emphasis
+    /// are reduced to their words instead of showing raw brackets and asterisks.
+    private static func plainText(fromMarkdown markdownText: String) -> String {
+        String(AmbientLightMarkdownParser.inlineAttributedText(markdownText).characters)
     }
 
     private var sourceLine: String {

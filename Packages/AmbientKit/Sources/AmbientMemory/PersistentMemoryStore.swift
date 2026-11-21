@@ -157,7 +157,7 @@ public actor PersistentMemoryStore: MemoryStore {
                 "exchange": .object(["user": .string(userText), "assistant": .string(assistantText)])
             ])
             let prompt = String(decoding: try JSONEncoder().encode(input), as: UTF8.self)
-            let answer = try await completionService.complete(systemPrompt: Self.extractionInstruction, userPrompt: prompt, tier: .fast)
+            let answer = try await completionService.complete(systemPrompt: Self.extractionInstruction, userPrompt: prompt, tier: .balanced)
             guard document.isAutomaticLearningEnabled, generation == learningGeneration,
                   let data = Self.learningJSON(answer).data(using: .utf8),
                   let response = try? JSONDecoder().decode(LearningResponse.self, from: data) else { return }
