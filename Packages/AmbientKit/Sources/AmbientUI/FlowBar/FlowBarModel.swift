@@ -334,8 +334,19 @@ public final class FlowBarModel {
         cancelLinger()
         isTyping = false
         pendingApproval = request
-        return await withCheckedContinuation { continuation in
-            approvalContinuation = continuation
+        return await withTaskCancellationHandler {
+            guard !Task.isCancelled else {
+                resolvePendingApproval(isAllowed: false)
+                return false
+            }
+            return await withCheckedContinuation { continuation in
+                approvalContinuation = continuation
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                guard self?.pendingApproval?.id == request.id else { return }
+                self?.resolvePendingApproval(isAllowed: false)
+            }
         }
     }
 
@@ -395,7 +406,7 @@ public final class FlowBarModel {
         onOpenSettings?()
     }
 
-    func answerPendingApproval(isAllowed: Bool) {
+    public func answerPendingApproval(isAllowed: Bool) {
         resolvePendingApproval(isAllowed: isAllowed)
     }
 

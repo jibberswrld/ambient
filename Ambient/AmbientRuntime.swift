@@ -62,6 +62,9 @@ final class AmbientRuntime {
     let interaction: AmbientInteraction
     let screenTools: AmbientScreenToolProvider
 
+    var onReady: (() -> Void)?
+    var onAgentEvent: ((AgentEvent) -> Void)?
+
     private let backgroundTaskManager: BackgroundTaskManager
     private var turnTask: Task<Void, Never>?
     private var cancellationTask: Task<Void, Never>?
@@ -129,7 +132,9 @@ final class AmbientRuntime {
                 state.transition(to: .failed(.notSignedIn))
                 return
             }
+            interaction.closeGate()
             isReady = true
+            onReady?()
             NSLog("Ambient sign-in ready")
             if let pendingText { self.pendingText = nil; submit(text: pendingText) }
             #if DEBUG
@@ -137,7 +142,7 @@ final class AmbientRuntime {
             let arguments = ProcessInfo.processInfo.arguments
             if let index = arguments.firstIndex(of: "--transcribe-wav"), arguments.indices.contains(index + 1) {
                 do { submit(recordedWAV: try Data(contentsOf: URL(fileURLWithPath: arguments[index + 1]))) }
-                catch { state.transition(to: .failed(.other(message: error.localizedDescription))) }
+                catch { reportFailure(.other(message: error.localizedDescription)) }
             }
             #endif
         }
@@ -198,6 +203,7 @@ final class AmbientRuntime {
                 var activities: [(identifier: String, label: String)] = []
                 for await event in agentSession.send(UserTurn(text: userText)) {
                     guard isCurrent(identifier) else { return }
+                    onAgentEvent?(event)
                     switch event {
                     case .textDelta(let fragment):
                         accumulatedText += fragment
@@ -221,7 +227,7 @@ final class AmbientRuntime {
                 }
             } catch {
                 guard isCurrent(identifier) else { return }
-                state.transition(to: .failed(error as? AgentFailure ?? .other(message: error.localizedDescription)))
+                reportFailure(error as? AgentFailure ?? .other(message: error.localizedDescription))
             }
         }
     }
@@ -266,6 +272,11 @@ final class AmbientRuntime {
         interaction.cancelApproval()
         screenTools.clearCaptures()
         state.transition(to: .idle)
+    }
+
+    func reportFailure(_ failure: AgentFailure) {
+        state.transition(to: .failed(failure))
+        onAgentEvent?(.failed(failure))
     }
 
     func stop() {

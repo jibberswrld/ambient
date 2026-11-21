@@ -13,7 +13,7 @@ import Testing
 struct AmbientTests {
 
     @Test func firstPermissionRequestUsesSystemPromptOnly() async throws {
-        let presentationDestination = WindowPositionManager.permissionRequestPresentationDestination(
+        let presentationDestination = AmbientPermissionHelper.permissionRequestPresentationDestination(
             hasPermissionNow: false,
             hasAttemptedSystemPrompt: false
         )
@@ -22,7 +22,7 @@ struct AmbientTests {
     }
 
     @Test func repeatedPermissionRequestOpensSystemSettings() async throws {
-        let presentationDestination = WindowPositionManager.permissionRequestPresentationDestination(
+        let presentationDestination = AmbientPermissionHelper.permissionRequestPresentationDestination(
             hasPermissionNow: false,
             hasAttemptedSystemPrompt: true
         )
@@ -31,7 +31,7 @@ struct AmbientTests {
     }
 
     @Test func knownGrantedScreenRecordingPermissionSkipsTheGate() async throws {
-        let shouldTreatPermissionAsGranted = WindowPositionManager.shouldTreatScreenRecordingPermissionAsGrantedForSessionLaunch(
+        let shouldTreatPermissionAsGranted = AmbientPermissionHelper.shouldTreatScreenRecordingPermissionAsGrantedForSessionLaunch(
             hasScreenRecordingPermissionNow: false,
             hasPreviouslyConfirmedScreenRecordingPermission: true
         )
@@ -41,13 +41,13 @@ struct AmbientTests {
 
     @Test func automationHookPreservesEscapedText() throws {
         let url = try #require(URL(string: "ambient://ask?text=reply%20to%20Sam%3A%20yes%20%26%20thanks%2B1%3F"))
-        #expect(CompanionAppDelegate.automationText(from: url) == "reply to Sam: yes & thanks+1?")
+        #expect(AmbientAppDelegate.automationText(from: url) == "reply to Sam: yes & thanks+1?")
     }
 
     @Test func automationHookRejectsOtherRoutesAndEmptyInput() throws {
         for address in ["ambient://open?text=hello", "https://ask?text=hello", "ambient://ask", "ambient://ask?text=%20%0A"] {
             let url = try #require(URL(string: address))
-            #expect(CompanionAppDelegate.automationText(from: url) == nil)
+            #expect(AmbientAppDelegate.automationText(from: url) == nil)
         }
     }
 

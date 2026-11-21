@@ -558,7 +558,7 @@ struct AmbientActivitySettingsPage: View {
     var backgroundTaskStore: any BackgroundTaskStore
 
     @State private var backgroundTasks: [AmbientBackgroundTask]?
-    @State private var selectedTaskID: UUID?
+    @Binding var selectedTaskID: UUID?
     @State private var transcriptText: String?
 
     var body: some View {

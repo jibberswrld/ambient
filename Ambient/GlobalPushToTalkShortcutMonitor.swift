@@ -1,19 +1,18 @@
-//
-//  GlobalPushToTalkShortcutMonitor.swift
-//  leanring-buddy
-//
-//  Captures push-to-talk keyboard shortcuts while makesomething is running in the
-//  background. Uses a listen-only CGEvent tap so modifier-only shortcuts like
-//  ctrl + option behave more like a real system-wide voice tool.
-//
-
 import AppKit
 import Combine
 import CoreGraphics
 import Foundation
+import AmbientUI
+
+enum AmbientShortcut {
+    enum ShortcutTransition { case none, pressed, released }
+}
+
 
 final class GlobalPushToTalkShortcutMonitor: ObservableObject {
-    let shortcutTransitionPublisher = PassthroughSubject<BuddyPushToTalkShortcut.ShortcutTransition, Never>()
+    let shortcutTransitionPublisher = PassthroughSubject<AmbientShortcut.ShortcutTransition, Never>()
+
+    var shortcut: AmbientPushToTalkShortcut = .controlOption
 
     private var globalEventTap: CFMachPort?
     private var globalEventTapRunLoopSource: CFRunLoopSource?
@@ -62,7 +61,7 @@ final class GlobalPushToTalkShortcutMonitor: ObservableObject {
             callback: eventTapCallback,
             userInfo: Unmanaged.passUnretained(self).toOpaque()
         ) else {
-            print("⚠️ Global push-to-talk: couldn't create CGEvent tap")
+            print("Ambient Global push-to-talk: couldn't create CGEvent tap")
             return
         }
 
@@ -72,7 +71,7 @@ final class GlobalPushToTalkShortcutMonitor: ObservableObject {
             0
         ) else {
             CFMachPortInvalidate(globalEventTap)
-            print("⚠️ Global push-to-talk: couldn't create event tap run loop source")
+            print("Ambient Global push-to-talk: couldn't create event tap run loop source")
             return
         }
 
@@ -108,13 +107,16 @@ final class GlobalPushToTalkShortcutMonitor: ObservableObject {
             return Unmanaged.passUnretained(event)
         }
 
-        let eventKeyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
-        let shortcutTransition = BuddyPushToTalkShortcut.shortcutTransition(
-            for: eventType,
-            keyCode: eventKeyCode,
-            modifierFlagsRawValue: event.flags.rawValue,
-            wasShortcutPreviouslyPressed: isShortcutCurrentlyPressed
-        )
+        guard eventType == .flagsChanged else { return Unmanaged.passUnretained(event) }
+        let pressedFlags = NSEvent.ModifierFlags(rawValue: UInt(event.flags.rawValue)).intersection([.control, .option, .command, .shift])
+        let requiredFlags: NSEvent.ModifierFlags
+        switch shortcut {
+        case .controlOption: requiredFlags = [.control, .option]
+        case .optionCommand: requiredFlags = [.option, .command]
+        case .controlCommand: requiredFlags = [.control, .command]
+        }
+        let isPressed = pressedFlags == requiredFlags
+        let shortcutTransition: AmbientShortcut.ShortcutTransition = isPressed == isShortcutCurrentlyPressed ? .none : (isPressed ? .pressed : .released)
 
         switch shortcutTransition {
         case .none:

@@ -1,76 +1,349 @@
-//
-//  AmbientApp.swift
-//  Ambient
-//
-//  Menu bar-only companion app. No dock icon, no main window — just an
-//  always-available status item in the macOS menu bar. Clicking the icon
-//  opens a floating panel with companion voice controls.
-//
-
 import SwiftUI
+import AVFoundation
+import Combine
+import ServiceManagement
+import AmbientContracts
+import AmbientBackground
+import AmbientUI
 
 @main
 struct AmbientApp: App {
-    @NSApplicationDelegateAdaptor(CompanionAppDelegate.self) var appDelegate
+    @NSApplicationDelegateAdaptor(AmbientAppDelegate.self) var appDelegate
 
     var body: some Scene {
-        // The app lives entirely in the menu bar panel managed by the AppDelegate.
-        // This empty Settings scene satisfies SwiftUI's requirement for at least
-        // one scene but is never shown (LSUIElement=true removes the app menu).
-        Settings {
-            EmptyView()
-        }
+        Settings { EmptyView() }
+            .commands {
+                CommandGroup(replacing: .appSettings) {
+                    Button("Open Settings") { appDelegate.openSettings() }
+                        .keyboardShortcut(",", modifiers: .command)
+                }
+            }
     }
 }
 
-/// Manages the companion lifecycle: creates the menu bar panel and starts
-/// the companion voice pipeline on launch.
 @MainActor
-final class CompanionAppDelegate: NSObject, NSApplicationDelegate {
-    private var menuBarPanelManager: MenuBarPanelManager?
+final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
     private var runtime: AmbientRuntime?
-    private var companionManager: CompanionManager?
+    private var flowBarModel: FlowBarModel?
+    private var flowBarController: FlowBarPanelController?
+    private var settingsModel: AmbientSettingsModel?
+    private var settingsController: AmbientSettingsWindowController?
+    private var statusItem: NSStatusItem?
+    private var visibilityMenuItem: NSMenuItem?
+    private var backgroundUpdatesTask: Task<Void, Never>?
+    private var walletTask: Task<Void, Never>?
+    private var phaseSubscription: AnyCancellable?
+    private var shortcutSubscription: AnyCancellable?
+    private let dictationManager = AmbientDictationManager()
+    private let shortcutMonitor = GlobalPushToTalkShortcutMonitor()
+    private let pointerController = AmbientPointerWindowController()
+    private let permissionsModel = AmbientPermissionsModel()
+    private var firstRunModel: AmbientFirstRunModel?
+    private var permissionTimer: Timer?
+    private var recordingStartTask: Task<Void, Never>?
+    private var isShowingPermissions = false
+    private var previousPermissionsWereGranted = false
+    private var isUpdatingSettings = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        print("🎯 Ambient: Starting...")
-        print("🎯 Ambient: Version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown")")
-
-        UserDefaults.standard.register(defaults: ["NSInitialToolTipDelay": 0])
-
-
-        let runtime: AmbientRuntime
-        do { runtime = try AmbientRuntime() }
-        catch {
-            let alert = NSAlert()
-            alert.messageText = "Ambient could not start"
-            alert.informativeText = error.localizedDescription
-            alert.runModal()
-            NSApp.terminate(nil)
-            return
+        // Unit tests host the app executable but must not start a second live session.
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
+        do {
+            let runtime = try AmbientRuntime()
+            self.runtime = runtime
+            runtime.onReady = { [weak self] in self?.startInterface() }
+            createStatusItem()
+            runtime.start()
+        } catch {
+            let controller = AmbientOnboardingWindowController()
+            settingsStartupErrorController = controller
+            Task {
+                _ = await controller.presentGate(AmbientGateContent(title: "Ambient could not start", bodyText: error.localizedDescription,
+                    buttons: [AmbientGateButton(actionID: "quit", label: "Quit Ambient", prominence: .primary)]))
+                NSApp.terminate(nil)
+            }
         }
-        self.runtime = runtime
-        let companionManager = CompanionManager(runtime: runtime)
-        self.companionManager = companionManager
-        menuBarPanelManager = MenuBarPanelManager(companionManager: companionManager)
-        companionManager.start()
-        // Auto-open the panel if the user still needs to do something:
-        // either they haven't onboarded yet, or permissions were revoked.
-        if !companionManager.hasCompletedOnboarding || !companionManager.allPermissionsGranted {
-            menuBarPanelManager?.showPanelOnLaunch()
-        }
-        runtime.start()
     }
 
-    func applicationWillTerminate(_ notification: Notification) {
-        NSLog("Ambient application terminating")
-        companionManager?.stop()
+    private var settingsStartupErrorController: AmbientOnboardingWindowController?
+
+    private func startInterface() {
+        guard let runtime, flowBarModel == nil else { return }
+        let model = FlowBarModel()
+        let controller = FlowBarPanelController(model: model)
+        flowBarModel = model
+        flowBarController = controller
+        settingsModel = AmbientSettingsModel(generalSettings: AmbientGeneralSettings(
+            pushToTalkShortcut: AmbientPushToTalkShortcut(rawValue: UserDefaults.standard.string(forKey: "ambient.pushToTalkShortcut") ?? "") ?? .controlOption,
+            dockEdge: controller.placement.edge,
+            speaksReplies: runtime.spokenRepliesEnabled,
+            runsCommandsWithoutAsking: runtime.approvalSettings.allowWithoutAsking,
+            launchesAtLogin: SMAppService.mainApp.status == .enabled
+        ))
+        model.onCancelTurn = { [weak self] in self?.cancelTurn() }
+        model.onSubmitTypedText = { [weak self] text in self?.submit(text: text) }
+        model.onOpenSettings = { [weak self] in self?.openSettings() }
+        model.onCancelBackgroundTask = { [weak runtime] identifier in
+            guard let runtime else { return }
+            Task { await runtime.backgroundTaskStore.cancel(taskID: identifier) }
+        }
+        model.onDismissBackgroundTask = { [weak runtime] identifier in
+            guard let runtime else { return }
+            Task { await runtime.backgroundTaskStore.dismiss(taskID: identifier) }
+        }
+        model.onOpenBackgroundTaskTranscript = { [weak self] identifier in
+            self?.settingsModel?.selectedBackgroundTaskID = identifier
+            self?.openSettings(section: .activity)
+        }
+        // The panel persists the whole placement, including display and position, before this callback.
+        model.onDockEdgeChanged = { [weak self] edge in self?.settingsModel?.generalSettings.dockEdge = edge }
+        model.onOpenURL = { NSWorkspace.shared.open($0) }
+        runtime.onAgentEvent = { [weak model] event in model?.apply(event) }
+        runtime.interaction.approvalHandler = { [weak self, weak model] title, detail in
+            guard let self, let model else { return false }
+            self.showBar()
+            let kind: FlowBarApprovalRequest.Kind = title == "Run shell command?" ? .shellCommand
+                : (["Start codex agent?", "Start claude agent?", "Continue agent?"].contains(title) ? .backgroundAgent : .other)
+            NSLog("Ambient approval presented: %@", title)
+            let allowed = await model.requestApproval(FlowBarApprovalRequest(title: title, detail: detail, kind: kind))
+            NSLog("Ambient approval answered: %@", String(allowed))
+            return allowed
+        }
+        runtime.interaction.cancelApprovalHandler = { [weak model] in model?.returnToIdle() }
+        phaseSubscription = runtime.state.$phase.sink { [weak self, weak model] phase in
+            guard let self, let model else { return }
+            switch phase {
+            case .idle: model.returnToIdle()
+            case .listening(let level):
+                if model.turnPhase != .listening { model.beginListening() }
+                model.updateAudioLevel(Double(level))
+                self.firstRunModel?.audioLevel = Double(level)
+                self.showBar()
+            case .transcribing: model.beginTranscribing(); self.showBar()
+            case .thinking: model.beginThinking(); self.showBar()
+            // These arrive verbatim through onAgentEvent, not reconstructed from accumulated state.
+            case .working, .responding, .finished, .failed: break
+            }
+        }
+        runtime.screenTools.pointHandler = { [weak self] location, frame, label in
+            self?.pointerController.show(at: location, displayFrame: frame, label: label)
+        }
+        dictationManager.audioLevelChanged = { [weak runtime] in runtime?.updateAudioLevel($0) }
+        dictationManager.recordingFinished = { [weak runtime] in runtime?.submit(recordedWAV: $0) }
+        dictationManager.recordingFailed = { [weak runtime] in runtime?.reportFailure(.other(message: $0.localizedDescription)) }
+        shortcutSubscription = shortcutMonitor.shortcutTransitionPublisher.sink { [weak self] in self?.handleShortcut($0) }
+        settingsModel?.onGeneralSettingsChanged = { [weak self] in self?.applySettings($0) }
+        shortcutMonitor.shortcut = settingsModel?.generalSettings.pushToTalkShortcut ?? .controlOption
+        backgroundUpdatesTask = Task { [weak model] in
+            for await tasks in runtime.backgroundTaskStore.updates() {
+                guard !Task.isCancelled else { return }
+                model?.setBackgroundTasks(tasks)
+                NSLog("Ambient task tray updated: %ld tasks, %ld running", tasks.count, tasks.filter { $0.status == .running }.count)
+            }
+        }
+        permissionsModel.onGrant = { [weak self] in self?.grantPermission($0) }
+        permissionsModel.onContinue = { [weak self] in self?.continueOnboarding() }
+        refreshPermissions()
+        if !UserDefaults.standard.bool(forKey: "ambient.onboardingCompleted") || !permissionsModel.areAllGranted {
+            showPermissions()
+        }
+        permissionTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.refreshPermissions() }
+        }
+        showBar()
+    }
+
+    private func createStatusItem() {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        item.button?.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Ambient")
+        item.button?.image?.isTemplate = true
+        let menu = NSMenu()
+        let settings = menu.addItem(withTitle: "Open Settings", action: #selector(openSettingsFromMenu), keyEquivalent: ",")
+        settings.target = self
+        let visibility = menu.addItem(withTitle: "Show Bar", action: #selector(toggleBar), keyEquivalent: "")
+        visibility.target = self
+        visibilityMenuItem = visibility
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "Quit Ambient", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        item.menu = menu
+        statusItem = item
+    }
+
+    private func showBar() {
+        flowBarController?.show()
+        visibilityMenuItem?.title = "Hide Bar"
+    }
+
+    @objc private func toggleBar() {
+        guard let controller = flowBarController else { return }
+        if controller.panelWindow.isVisible {
+            controller.hide()
+            visibilityMenuItem?.title = "Show Bar"
+        } else { showBar() }
+    }
+
+    @objc private func openSettingsFromMenu() { openSettings() }
+
+    func openSettings(section: AmbientSettingsSection? = nil) {
+        guard let runtime, let settingsModel else { return }
+        if settingsController == nil {
+            settingsController = AmbientSettingsWindowController(model: settingsModel, services: AmbientSettingsServices(
+                connectorService: runtime.connectorService, memoryStore: runtime.memoryStore,
+                skillStore: runtime.skillStore, backgroundTaskStore: runtime.backgroundTaskStore
+            ))
+        }
+        settingsController?.show(section: section)
+        walletTask?.cancel()
+        walletTask = Task {
+            guard let credential = await runtime.credentialSource.credential() else { return }
+            do {
+                var request = URLRequest(url: credential.baseURL.appendingPathComponent("wallet"), timeoutInterval: 15)
+                request.setValue("Bearer \(credential.apiKey)", forHTTPHeaderField: "Authorization")
+                let (data, response) = try await URLSession.shared.data(for: request)
+                guard !Task.isCancelled else { return }
+                guard (response as? HTTPURLResponse)?.statusCode == 200,
+                      let wallet = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                    throw AgentFailure.other(message: "Your publik account could not be loaded.")
+                }
+                settingsModel.account = Self.accountSummary(from: wallet, baseURL: credential.baseURL)
+                NSLog("Ambient account loaded: handle=%@ plan=%@ percentage=%@", String(settingsModel.account?.publikHandle != nil), String(settingsModel.account?.planName != nil), String(settingsModel.account?.usageRemainingFraction != nil))
+            } catch {
+                guard !Task.isCancelled else { return }
+                runtime.reportFailure(.other(message: "Your publik account could not be loaded. Try opening Settings again."))
+            }
+        }
+    }
+
+    static func accountSummary(from wallet: [String: Any], baseURL: URL) -> AmbientAccountSummary {
+        let account = wallet["account"] as? [String: Any]
+        let plan = wallet["plan"] as? [String: Any]
+        let percentage = wallet["remaining_percent"] as? Double ?? wallet["prepaid_remaining_percent"] as? Double
+        let reset = (wallet["resets_at"] as? String).flatMap { ISO8601DateFormatter().date(from: $0) }
+        let accountURL = (wallet["top_up_url"] as? String).flatMap(URL.init(string:)) ?? baseURL.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("wallet")
+        return AmbientAccountSummary(publikHandle: account?["handle"] as? String, planName: plan?["label"] as? String,
+            usageRemainingFraction: percentage.map { min(1, max(0, $0 / 100)) }, usageResetsOn: reset, manageAccountURL: accountURL)
+    }
+
+    private func applySettings(_ settings: AmbientGeneralSettings) {
+        guard !isUpdatingSettings, let runtime else { return }
+        runtime.spokenRepliesEnabled = settings.speaksReplies
+        runtime.approvalSettings.allowWithoutAsking = settings.runsCommandsWithoutAsking
+        UserDefaults.standard.set(settings.pushToTalkShortcut.rawValue, forKey: "ambient.pushToTalkShortcut")
+        shortcutMonitor.shortcut = settings.pushToTalkShortcut
+        if flowBarController?.placement.edge != settings.dockEdge { flowBarController?.dock(to: settings.dockEdge) }
+        if settings.launchesAtLogin != (SMAppService.mainApp.status == .enabled) {
+            do {
+                if settings.launchesAtLogin { try SMAppService.mainApp.register() }
+                else { try SMAppService.mainApp.unregister() }
+            } catch {
+                runtime.reportFailure(.other(message: "Open at login could not be changed. Check Login Items in System Settings."))
+            }
+            isUpdatingSettings = true
+            settingsModel?.generalSettings.launchesAtLogin = SMAppService.mainApp.status == .enabled
+            isUpdatingSettings = false
+        }
+    }
+
+    private func refreshPermissions() {
+        let microphone = AVCaptureDevice.authorizationStatus(for: .audio)
+        permissionsModel.statuses = [
+            .microphone: microphone == .authorized ? .granted : (microphone == .notDetermined ? .notYetAsked : .deniedInSystemSettings),
+            .accessibility: AmbientPermissionHelper.hasAccessibilityPermission() ? .granted : .deniedInSystemSettings,
+            .screenRecording: AmbientPermissionHelper.hasScreenRecordingPermission() ? .granted : .deniedInSystemSettings
+        ]
+        if permissionsModel.status(of: .accessibility) == .granted { shortcutMonitor.start() }
+        else { shortcutMonitor.stop() }
+        if previousPermissionsWereGranted && !permissionsModel.areAllGranted { showPermissions() }
+        previousPermissionsWereGranted = permissionsModel.areAllGranted
+    }
+
+    private func showPermissions() {
+        guard let runtime else { return }
+        isShowingPermissions = true
+        runtime.interaction.onboardingController.showPermissions(permissionsModel)
+    }
+
+    private func grantPermission(_ kind: AmbientPermissionKind) {
+        switch kind {
+        case .microphone:
+            if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
+                permissionsModel.statuses[.microphone] = .waiting
+                Task { _ = await AVCaptureDevice.requestAccess(for: .audio); refreshPermissions() }
+            } else {
+                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!)
+            }
+        case .accessibility: AmbientPermissionHelper.requestAccessibilityPermission()
+        case .screenRecording: AmbientPermissionHelper.requestScreenRecordingPermission()
+        }
+        refreshPermissions()
+    }
+
+    private func continueOnboarding() {
+        isShowingPermissions = false
+        guard let runtime else { return }
+        if UserDefaults.standard.bool(forKey: "ambient.onboardingCompleted") {
+            runtime.interaction.onboardingController.close()
+            return
+        }
+        let model = AmbientFirstRunModel(shortcut: settingsModel?.generalSettings.pushToTalkShortcut ?? .controlOption,
+            chosenEdge: flowBarController?.placement.edge ?? .bottom)
+        firstRunModel = model
+        model.onDockEdgeChosen = { [weak self] in self?.flowBarController?.dock(to: $0) }
+        model.onFinish = { [weak self] in
+            UserDefaults.standard.set(true, forKey: "ambient.onboardingCompleted")
+            self?.runtime?.interaction.onboardingController.close()
+            self?.firstRunModel = nil
+        }
+        runtime.interaction.onboardingController.showFirstRun(model)
+    }
+
+    private func handleShortcut(_ transition: AmbientShortcut.ShortcutTransition) {
+        // Practice observes the keys but never sends a practice recording to the agent.
+        if let firstRunModel, runtime?.interaction.onboardingController.onboardingWindow.isVisible == true, !isShowingPermissions {
+            firstRunModel.isShortcutHeld = transition == .pressed
+            return
+        }
+        switch transition {
+        case .pressed:
+            cancelTurn()
+            pointerController.hide()
+            runtime?.beginListening()
+            recordingStartTask = Task { await dictationManager.startRecording() }
+        case .released:
+            recordingStartTask?.cancel()
+            recordingStartTask = nil
+            if !dictationManager.finishRecording(), case .listening = runtime?.state.phase { runtime?.cancelCurrentTurn() }
+        case .none: break
+        }
+    }
+
+    private func cancelTurn() {
+        recordingStartTask?.cancel()
+        recordingStartTask = nil
+        dictationManager.cancelCurrentDictation()
+        runtime?.cancelCurrentTurn()
+    }
+
+    private func submit(text: String) {
+        dictationManager.cancelCurrentDictation()
+        runtime?.submit(text: text)
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls {
-            guard let text = Self.automationText(from: url) else { continue }
-            companionManager?.buddyDictationManager.cancelCurrentDictation()
-            runtime?.submit(text: text)
+            if let text = Self.automationText(from: url) { submit(text: text); continue }
+            #if DEBUG
+            if url.scheme == "ambient", url.host == "debug", ProcessInfo.processInfo.arguments.contains("--enable-ui-testing") {
+                let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+                let value = components?.queryItems?.first(where: { $0.name == "value" })?.value
+                switch url.path {
+                case "/approval": flowBarModel?.answerPendingApproval(isAllowed: value == "allow")
+                case "/settings": openSettings(section: value.flatMap(AmbientSettingsSection.init(rawValue:)))
+                case "/tasks": flowBarModel?.returnToIdle(); flowBarModel?.toggleTaskTray()
+                default: break
+                }
+            }
+            #endif
         }
     }
 
@@ -80,5 +353,16 @@ final class CompanionAppDelegate: NSObject, NSApplicationDelegate {
               let text = components.queryItems?.first(where: { $0.name == "text" })?.value,
               !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         return text
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        cancelTurn()
+        runtime?.stop()
+        shortcutMonitor.stop()
+        backgroundUpdatesTask?.cancel()
+        walletTask?.cancel()
+        permissionTimer?.invalidate()
+        pointerController.hide()
+        flowBarController?.hide()
     }
 }

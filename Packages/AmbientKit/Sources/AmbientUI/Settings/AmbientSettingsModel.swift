@@ -35,7 +35,7 @@ public struct AmbientGeneralSettings: Equatable, Sendable {
     public var runsCommandsWithoutAsking: Bool
     public var launchesAtLogin: Bool
 
-    public init(pushToTalkShortcut: AmbientPushToTalkShortcut = .controlOption, dockEdge: FlowBarDockEdge = .bottom, speaksReplies: Bool = true, runsCommandsWithoutAsking: Bool = false, launchesAtLogin: Bool = true) {
+    public init(pushToTalkShortcut: AmbientPushToTalkShortcut = .controlOption, dockEdge: FlowBarDockEdge = .bottom, speaksReplies: Bool = true, runsCommandsWithoutAsking: Bool = false, launchesAtLogin: Bool = false) {
         self.pushToTalkShortcut = pushToTalkShortcut
         self.dockEdge = dockEdge
         self.speaksReplies = speaksReplies
@@ -46,15 +46,15 @@ public struct AmbientGeneralSettings: Equatable, Sendable {
 
 /// The publik account, as the Account page shows it. Usage is a percentage only, never money.
 public struct AmbientAccountSummary: Equatable, Sendable {
-    public var publikHandle: String
-    public var planName: String
+    public var publikHandle: String?
+    public var planName: String?
     /// 0 to 1. Nil while unknown.
     public var usageRemainingFraction: Double?
     /// When the allowance refills, if known.
     public var usageResetsOn: Date?
     public var manageAccountURL: URL
 
-    public init(publikHandle: String, planName: String, usageRemainingFraction: Double?, usageResetsOn: Date? = nil, manageAccountURL: URL) {
+    public init(publikHandle: String?, planName: String?, usageRemainingFraction: Double?, usageResetsOn: Date? = nil, manageAccountURL: URL) {
         self.publikHandle = publikHandle
         self.planName = planName
         self.usageRemainingFraction = usageRemainingFraction
@@ -109,6 +109,7 @@ public final class AmbientSettingsModel {
         didSet { if generalSettings != oldValue { onGeneralSettingsChanged?(generalSettings) } }
     }
     public var account: AmbientAccountSummary?
+    public var selectedBackgroundTaskID: UUID?
     public var selectedSection: AmbientSettingsSection = .general
 
     /// Called after every change on the General page.

@@ -4,7 +4,7 @@ import AmbientContracts
 @MainActor
 final class AmbientScreenToolProvider: ToolProvider {
     var pointHandler: ((CGPoint, CGRect, String) -> Void)?
-    private var captures: [CompanionScreenCapture] = []
+    private var captures: [AmbientScreenCapture] = []
 
     func clearCaptures() { captures = [] }
     func tools() async -> [any AmbientTool] {
@@ -29,7 +29,7 @@ final class AmbientScreenToolProvider: ToolProvider {
             return ToolResult(content: "Screen Recording permission is not granted to Ambient. Grant it in System Settings > Privacy & Security > Screen Recording, then restart Ambient.", isError: true)
         }
         do {
-            let captured = try await CompanionScreenCaptureUtility.captureAllScreensAsJPEG()
+            let captured = try await AmbientScreenCaptureUtility.captureAllScreensAsJPEG()
             try Task.checkCancellation()
             // Base64 adds one third. Leave ample room for prompts, tools, and the reply history.
             guard captured.reduce(0, { $0 + $1.imageData.count }) <= 1_500_000 else {

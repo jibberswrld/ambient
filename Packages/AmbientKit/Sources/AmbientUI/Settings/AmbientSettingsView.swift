@@ -50,7 +50,7 @@ public struct AmbientSettingsView: View {
         case .connectors: AmbientConnectorsSettingsPage(connectorService: services.connectorService, onOpenURL: model.onOpenURL)
         case .memory: AmbientMemorySettingsPage(memoryStore: services.memoryStore)
         case .skills: AmbientSkillsSettingsPage(skillStore: services.skillStore)
-        case .activity: AmbientActivitySettingsPage(backgroundTaskStore: services.backgroundTaskStore)
+        case .activity: AmbientActivitySettingsPage(backgroundTaskStore: services.backgroundTaskStore, selectedTaskID: $model.selectedBackgroundTaskID)
         case .account: AmbientAccountSettingsPage(model: model)
         }
     }
@@ -379,18 +379,22 @@ struct AmbientAccountSettingsPage: View {
             if let account = model.account {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 14) {
-                        Text(String(account.publikHandle.prefix(1)).uppercased())
+                        Text(account.publikHandle.map { String($0.prefix(1)).uppercased() } ?? "P")
                             .font(.system(size: 17, weight: .semibold))
                             .foregroundStyle(AmbientDesign.Palette.emberInk)
                             .frame(width: 44, height: 44)
                             .background(Circle().fill(LinearGradient(colors: [AmbientDesign.Palette.emberCore, AmbientDesign.Palette.ember], startPoint: .top, endPoint: .bottom)))
                         VStack(alignment: .leading, spacing: 3) {
-                            Text("@\(account.publikHandle)")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(AmbientDesign.Palette.primaryText)
-                            Text("\(account.planName) plan")
-                                .font(.system(size: 12.5))
-                                .foregroundStyle(AmbientDesign.Palette.secondaryText)
+                            if let handle = account.publikHandle {
+                                Text("@\(handle)")
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .foregroundStyle(AmbientDesign.Palette.primaryText)
+                            }
+                            if let planName = account.planName {
+                                Text("\(planName) plan")
+                                    .font(.system(size: 12.5))
+                                    .foregroundStyle(AmbientDesign.Palette.secondaryText)
+                            }
                         }
                         Spacer()
                         AmbientCapsuleButton(title: "Manage", systemImageName: "arrow.up.right", prominence: .secondary, surface: .window) {
@@ -398,9 +402,11 @@ struct AmbientAccountSettingsPage: View {
                         }
                     }
                     .padding(18)
-                    Rectangle().fill(AmbientDesign.Palette.cardHairline).frame(height: 1)
-                    AmbientUsageMeter(remainingFraction: account.usageRemainingFraction, resetsOn: account.usageResetsOn)
-                        .padding(18)
+                    if account.usageRemainingFraction != nil {
+                        Rectangle().fill(AmbientDesign.Palette.cardHairline).frame(height: 1)
+                        AmbientUsageMeter(remainingFraction: account.usageRemainingFraction, resetsOn: account.usageResetsOn)
+                            .padding(18)
+                    }
                 }
                 .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(AmbientDesign.Palette.cardBackground))
                 .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(AmbientDesign.Palette.cardHairline, lineWidth: 1))
@@ -423,7 +429,7 @@ struct AmbientUsageMeter: View {
                     .font(.system(size: 26, weight: .semibold).monospacedDigit())
                     .tracking(-0.6)
                     .foregroundStyle(AmbientDesign.Palette.primaryText)
-                Text("left this month")
+                Text("remaining")
                     .font(.system(size: 13))
                     .foregroundStyle(AmbientDesign.Palette.secondaryText)
                 Spacer()
