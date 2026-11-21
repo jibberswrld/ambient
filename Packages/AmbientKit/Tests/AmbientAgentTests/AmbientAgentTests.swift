@@ -107,7 +107,10 @@ final class AmbientAgentTests: XCTestCase {
         let generatedTestKey = UUID().uuidString
         let source = PublikCredentialSource(userCredential: .init(baseURL: URL(string: "https://own.invalid/v1")!, apiKey: generatedTestKey))
         let credential = await source.credential()
-        XCTAssertEqual(credential?.apiKey, ProcessInfo.processInfo.environment["PUBLIK_API_KEY"] ?? generatedTestKey)
+        // On a Mac that is signed in to Ambient, the stored publik install key wins over the user's own key.
+        // Compared without XCTAssertEqual so a failure can never print a real key.
+        let acceptableKeys = [ProcessInfo.processInfo.environment["PUBLIK_API_KEY"], Publik.readCredential()?.key, generatedTestKey].compactMap { $0 }
+        XCTAssertTrue(credential.map { acceptableKeys.contains($0.apiKey) } ?? false, "The credential source returned a key from none of its three sources.")
     }
     func testSSEFragmentedArgumentsAndMultipleRounds() async {
         let provider = TestProvider([TestTool()]); var count = 0
