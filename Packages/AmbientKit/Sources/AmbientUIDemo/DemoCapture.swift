@@ -135,6 +135,9 @@ enum DemoCaptureRunner {
         guard let bitmap = hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds) else { return }
         hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
         try? bitmap.representation(using: .png, properties: [:])?.write(to: fileURL)
+        // Tear the SwiftUI tree down now: a hundred captures of live views (timers, streams, repeating animations)
+        // left alive in closed windows eventually starve the main thread.
+        offscreenWindow.contentView = nil
         offscreenWindow.close()
     }
 }
