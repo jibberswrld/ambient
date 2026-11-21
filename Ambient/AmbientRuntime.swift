@@ -228,42 +228,52 @@ final class AmbientRuntime {
                 state.begin(userText: userText)
                 state.transition(to: .thinking)
                 var accumulatedText = ""
-                // Speech starts with the first finished sentence instead of waiting for the whole reply.
-                let speech = spokenRepliesEnabled ? startSpeaking(identifier: identifier) : nil
+                // Everything the person reads goes through here, so the bar and the state never disagree.
+                let reveal: @MainActor (String) -> Void = { [weak self] fragment in
+                    guard let self, !fragment.isEmpty, self.isCurrent(identifier) else { return }
+                    accumulatedText += fragment
+                    self.state.transition(to: .responding(text: accumulatedText))
+                    self.onAgentEvent?(.textDelta(fragment))
+                }
+                // With spoken replies on, each sentence is written as it is said, not ahead of the voice.
+                let speech = spokenRepliesEnabled ? startSpeaking(identifier: identifier, reveal: reveal) : nil
                 defer { speech?.sentences.finish() }
                 var unspokenText = ""
                 var activities: [(identifier: String, label: String)] = []
                 for await event in agentSession.send(UserTurn(text: userText)) {
                     guard isCurrent(identifier) else { return }
-                    onAgentEvent?(event)
                     switch event {
                     case .textDelta(let fragment):
                         guard !fragment.isEmpty else { continue }
-                        accumulatedText += fragment
-                        state.transition(to: .responding(text: accumulatedText))
-                        if let speech {
-                            unspokenText += fragment
-                            while let sentence = Self.takeSentence(from: &unspokenText) { speech.sentences.yield(sentence) }
-                        }
+                        guard let speech else { reveal(fragment); continue }
+                        unspokenText += fragment
+                        while let sentence = Self.takeSentence(from: &unspokenText) { speech.sentences.yield(sentence) }
                     case .toolStarted(let callID, let toolName, let activityLabel):
+                        onAgentEvent?(event)
                         activities.append((callID, activityLabel))
                         NSLog("Ambient tool started: %@", toolName)
                         state.transition(to: .working(activityLabel: activityLabel))
                     case .toolFinished(let callID, let toolName, let isError):
+                        onAgentEvent?(event)
                         activities.removeAll { $0.identifier == callID }
                         NSLog("Ambient tool finished: %@ error=%@", toolName, String(isError))
                         if let activity = activities.last { state.transition(to: .working(activityLabel: activity.label)) }
                         else { state.transition(to: .thinking) }
                     case .finished(let finalText):
-                        state.transition(to: .finished(finalText: finalText))
-                        // Learning is a separate model call; it must not delay the reply or its speech.
-                        Task { [memoryStore] in await memoryStore.learn(fromUserText: userText, assistantText: finalText) }
                         if let speech {
                             speech.sentences.yield(unspokenText)
                             speech.sentences.finish()
+                            // The turn is finished once the last sentence has been said and written.
                             try await speech.playback.value
+                            guard isCurrent(identifier) else { return }
                         }
-                    case .failed(let failure): state.transition(to: .failed(failure))
+                        onAgentEvent?(event)
+                        state.transition(to: .finished(finalText: finalText))
+                        // Learning is a separate model call; it must not delay the reply or its speech.
+                        Task { [memoryStore] in await memoryStore.learn(fromUserText: userText, assistantText: finalText) }
+                    case .failed(let failure):
+                        onAgentEvent?(event)
+                        state.transition(to: .failed(failure))
                     }
                 }
             } catch {
@@ -273,13 +283,14 @@ final class AmbientRuntime {
         }
     }
 
-    /// The first complete sentence of `text`, removed from it. A sentence ends at ". ", "! ", "? " or a line break.
+    /// The first complete sentence of `text`, removed from it, with the space or line break that ended it so the
+    /// written reply keeps its spacing. A sentence ends at ". ", "! ", "? " or a line break.
     static func takeSentence(from text: inout String) -> String? {
         var previous: Character?
         for index in text.indices {
             let character = text[index]
             if character.isNewline || (character == " " && previous.map { ".!?".contains($0) } == true) {
-                let sentence = String(text[..<index])
+                let sentence = String(text[...index])
                 text = String(text[text.index(after: index)...])
                 return sentence
             }
@@ -288,39 +299,82 @@ final class AmbientRuntime {
         return nil
     }
 
-    /// Synthesis of each sentence starts as soon as it arrives; playback keeps them in order.
-    private func startSpeaking(identifier: UUID) -> (sentences: AsyncStream<String>.Continuation, playback: Task<Void, Error>) {
+    /// The voice replies are spoken in. Not in Settings yet; `defaults write com.jabir.ambient ambient.spokenVoice <name>`.
+    private var spokenVoice: String {
+        UserDefaults.standard.string(forKey: "ambient.spokenVoice") ?? PublikSpeechClient.defaultVoice
+    }
+
+    /// Synthesis of each sentence starts as soon as it arrives; playback keeps them in order and writes each
+    /// sentence word by word while it is being said. A sentence that cannot be spoken is still written.
+    private func startSpeaking(identifier: UUID, reveal: @escaping @MainActor (String) -> Void) -> (sentences: AsyncStream<String>.Continuation, playback: Task<Void, Error>) {
         let (sentences, continuation) = AsyncStream<String>.makeStream()
-        let (clips, clipContinuation) = AsyncStream<Task<Data, Error>>.makeStream()
+        let (clips, clipContinuation) = AsyncStream<(text: String, audio: Task<Data, Error>?)>.makeStream()
+        let voice = spokenVoice
         Task { [speechClient] in
             for await sentence in sentences {
+                guard !sentence.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    // Blank lines carry the reply's layout and have nothing to say.
+                    clipContinuation.yield((sentence, nil))
+                    continue
+                }
                 // publik limits one speech call to 4096 characters.
-                var remainder = sentence.trimmingCharacters(in: .whitespacesAndNewlines)[...]
+                var remainder = sentence[...]
                 while !remainder.isEmpty {
                     let chunk = String(remainder.prefix(4096))
                     remainder = remainder.dropFirst(4096)
-                    clipContinuation.yield(Task { try await speechClient.synthesize(text: chunk) })
+                    clipContinuation.yield((chunk, Task { try await speechClient.synthesize(text: chunk, voice: voice) }))
                 }
             }
             clipContinuation.finish()
         }
         let playback = Task {
             for await clip in clips {
-                let audio = try await clip.value
-                guard isCurrent(identifier), spokenRepliesEnabled else { return }
-                let player = try AVAudioPlayer(data: audio)
+                guard isCurrent(identifier) else { return }
+                guard spokenRepliesEnabled, let synthesis = clip.audio else { reveal(clip.text); continue }
+                let player: AVAudioPlayer
+                do {
+                    player = try AVAudioPlayer(data: try await synthesis.value)
+                    guard isCurrent(identifier) else { return }
+                    guard player.prepareToPlay(), player.play() else { throw AgentFailure.other(message: "The spoken reply could not start playing.") }
+                } catch {
+                    NSLog("Ambient speech failed for one sentence: %@", error.localizedDescription)
+                    reveal(clip.text)
+                    continue
+                }
                 self.playback = player
-                guard player.prepareToPlay(), player.play() else {
-                    throw AgentFailure.other(message: "The spoken reply could not start playing.")
-                }
                 NSLog("Ambient speech playback started")
+                let words = Self.wordsKeepingSpacing(in: clip.text)
+                var revealedWordCount = 0
                 while player.isPlaying {
+                    // Writing runs slightly ahead of the voice so the last word is on screen before it is said.
+                    let spokenFraction = min(1, (player.currentTime + 0.25) / max(player.duration * 0.9, 0.1))
+                    let wordCountDue = min(words.count, Int((Double(words.count) * spokenFraction).rounded(.up)))
+                    if wordCountDue > revealedWordCount {
+                        reveal(words[revealedWordCount..<wordCountDue].joined())
+                        revealedWordCount = wordCountDue
+                    }
                     try await Task.sleep(for: .milliseconds(30))
-                    guard isCurrent(identifier), spokenRepliesEnabled else { return }
+                    guard isCurrent(identifier) else { return }
+                    if !spokenRepliesEnabled { player.stop() }
                 }
+                reveal(words[revealedWordCount...].joined())
             }
         }
         return (continuation, playback)
+    }
+
+    /// Splits text after each run of whitespace, so joining the pieces gives the text back unchanged.
+    static func wordsKeepingSpacing(in text: String) -> [String] {
+        var words: [String] = [], current = ""
+        for character in text {
+            if !character.isWhitespace, current.last?.isWhitespace == true {
+                words.append(current)
+                current = ""
+            }
+            current.append(character)
+        }
+        if !current.isEmpty { words.append(current) }
+        return words
     }
 
     private func isCurrent(_ identifier: UUID) -> Bool { identifier == turnIdentifier && !Task.isCancelled }

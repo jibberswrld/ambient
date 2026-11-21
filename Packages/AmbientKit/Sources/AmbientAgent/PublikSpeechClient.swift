@@ -8,13 +8,17 @@ public struct PublikSpeechClient: Sendable {
         client = PublikAIClient(credentialSource: credentialSource, urlSession: urlSession)
     }
 
-    /// Returns WAV audio, ready for the app's audio player. This model/voice pair was verified against publik.
-    public func synthesize(text: String) async throws -> Data {
+    /// The voice replies are spoken in unless the caller names another.
+    public static let defaultVoice = "ash"
+
+    /// Returns WAV audio, ready for the app's audio player. publik serves `tts-1` with the voices alloy, ash,
+    /// coral, echo, fable, nova, onyx, sage and shimmer (checked 2026-11-21); it has no newer speech model.
+    public func synthesize(text: String, voice: String = PublikSpeechClient.defaultVoice) async throws -> Data {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.count <= 4096 else {
             throw AgentFailure.other(message: "Speech needs between 1 and 4096 characters.")
         }
         let body = try JSONEncoder().encode(JSONValue.object([
-            "model": .string("tts-1"), "voice": .string("alloy"), "input": .string(text), "response_format": .string("wav")
+            "model": .string("tts-1"), "voice": .string(voice), "input": .string(text), "response_format": .string("wav")
         ]))
         let audio = try await client.post(path: "audio/speech", body: body)
         guard audio.count >= 12, audio.prefix(4) == Data("RIFF".utf8), audio.dropFirst(8).prefix(4) == Data("WAVE".utf8) else {

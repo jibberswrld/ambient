@@ -47,35 +47,21 @@ public enum AmbientTourCoachCorner: Equatable, Sendable {
 @Observable
 final class AmbientTourPanelLayout {
     var cardAlignment: Alignment = .topTrailing
-    @ObservationIgnored var onCardFrameChanged: ((CGRect) -> Void)?
-    @ObservationIgnored var onCardDragChanged: (() -> Void)?
-    @ObservationIgnored var onCardDragEnded: (() -> Void)?
+    @ObservationIgnored var onCardSizeChanged: ((CGSize) -> Void)?
 }
 
-private struct AmbientTourCardFramePreferenceKey: PreferenceKey {
-    static let defaultValue: CGRect = .zero
-    static func reduce(value: inout CGRect, nextValue: () -> CGRect) { value = nextValue() }
-}
-
-/// Everything inside the coach's panel: the card in its corner, with room around it for the shadow and for the
-/// card to grow without the window resizing under it.
+/// Everything inside the coach's panel: the card, with room around it for its shadow.
 struct AmbientTourPanelRootView: View {
     var model: AmbientTourModel
     var layout: AmbientTourPanelLayout
 
     var body: some View {
         AmbientTourCoachCard(model: model)
-            .background(GeometryReader { geometry in
-                Color.clear.preference(key: AmbientTourCardFramePreferenceKey.self, value: geometry.frame(in: .global))
-            })
-            .onPreferenceChange(AmbientTourCardFramePreferenceKey.self) { cardFrame in layout.onCardFrameChanged?(cardFrame) }
-            // The card moves with the pointer from wherever it was grabbed. Buttons still take plain clicks
-            // because the drag only starts after the pointer has moved.
-            .gesture(
-                DragGesture(minimumDistance: 3, coordinateSpace: .global)
-                    .onChanged { _ in layout.onCardDragChanged?() }
-                    .onEnded { _ in layout.onCardDragEnded?() }
-            )
+            // The card takes the height its content needs; the panel is then sized to it, not the reverse.
+            .fixedSize(horizontal: false, vertical: true)
+            // A preference set inside `.background` never reaches this view, which is how the first version of
+            // this panel ended up never learning where its card was.
+            .onGeometryChange(for: CGSize.self, of: { $0.size }, action: { cardSize in layout.onCardSizeChanged?(cardSize) })
             .padding(AmbientTourPanelController.cardMargin)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: layout.cardAlignment)
     }
@@ -93,8 +79,10 @@ private final class AmbientTourPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
-/// Owns the coach's floating panel: where it sits relative to the bar, letting clicks through everywhere except
-/// the card, and moving it when the person drags it.
+/// Owns the coach's floating panel. The panel is an ordinary window exactly as large as the card plus its shadow:
+/// it always takes clicks, is dragged by its background like any window, and is resized when the card changes
+/// height. Nothing here switches mouse handling on and off, because a card that misses a click is worse than a
+/// card that covers a little of the screen.
 ///
 ///     let tourController = AmbientTourPanelController(model: tourModel)
 ///     tourController.show(awayFromBarDockedTo: .bottom, on: flowBarController.dockedScreen)
@@ -107,16 +95,16 @@ public final class AmbientTourPanelController {
     static let cardMargin: CGFloat = 28
     /// Gap between the card and the edges of the usable screen.
     static let insetFromScreenEdge: CGFloat = 14
-    /// Tall enough for the tallest card (the cheat sheet) plus its margin. Only the card takes clicks.
-    static let panelSize = CGSize(width: AmbientTourMetrics.cardWidth + cardMargin * 2, height: 520)
+    /// The size before the card has been measured.
+    static let panelSize = CGSize(width: AmbientTourMetrics.cardWidth + cardMargin * 2, height: 320)
 
     private let panel: AmbientTourPanel
     private let layout = AmbientTourPanelLayout()
-    private var cardFrameInPanelContent: CGRect = .zero
-    private var eventMonitors: [Any] = []
-    private var dragStart: (panelOrigin: CGPoint, pointerLocation: CGPoint)?
+    private var windowMoveObserver: NSObjectProtocol?
+    private var pendingShrink: DispatchWorkItem?
     /// Once the person has put the coach somewhere, it stays there instead of following the bar.
     private var hasBeenMovedByPerson = false
+    private var isCardAnchoredToTop = true
 
     public init(model: AmbientTourModel) {
         self.model = model
@@ -127,8 +115,8 @@ public final class AmbientTourPanelController {
             defer: false
         )
         panel.isFloatingPanel = true
-        // Below the bar (status bar level), so the coach can never cover the bar or its reply card.
-        panel.level = .floating
+        // Above the bar and its reply card, so an answer can never cover the coach's buttons.
+        panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 1)
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
         panel.hidesOnDeactivate = false
         panel.becomesKeyOnlyIfNeeded = true
@@ -136,21 +124,22 @@ public final class AmbientTourPanelController {
         panel.backgroundColor = .clear
         // The glass draws its own shadow, shaped like the glass.
         panel.hasShadow = false
-        panel.isMovable = false
-        panel.ignoresMouseEvents = true
+        panel.isMovable = true
+        panel.isMovableByWindowBackground = true
         panel.appearance = NSAppearance(named: .darkAqua)
 
         let hostingView = AmbientTourHostingView(rootView: AmbientTourPanelRootView(model: model, layout: layout))
-        // The panel's size is fixed; SwiftUI must not resize it to fit the card.
+        // The controller sizes the panel from the measured card; SwiftUI must not resize it as well.
         hostingView.sizingOptions = []
         panel.contentView = hostingView
 
-        layout.onCardFrameChanged = { [weak self] cardFrame in
-            self?.cardFrameInPanelContent = cardFrame
-            self?.updateClickThrough()
+        layout.onCardSizeChanged = { [weak self] cardSize in self?.cardSizeChanged(cardSize) }
+        windowMoveObserver = NotificationCenter.default.addObserver(forName: NSWindow.didMoveNotification, object: panel, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                // Only a move made with the mouse button down is the person's; the controller's own placement is not.
+                if NSEvent.pressedMouseButtons & 1 != 0 { self?.hasBeenMovedByPerson = true }
+            }
         }
-        layout.onCardDragChanged = { [weak self] in self?.cardDragChanged() }
-        layout.onCardDragEnded = { [weak self] in self?.cardDragEnded() }
     }
 
     /// The coach's window, for captures. Do not reconfigure it.
@@ -160,7 +149,6 @@ public final class AmbientTourPanelController {
         hasBeenMovedByPerson = false
         place(awayFromBarDockedTo: barEdge, on: screen)
         panel.orderFrontRegardless()
-        installPointerMonitors()
         model.begin()
     }
 
@@ -172,7 +160,7 @@ public final class AmbientTourPanelController {
     }
 
     public func close() {
-        removePointerMonitors()
+        pendingShrink?.cancel()
         panel.orderOut(nil)
     }
 
@@ -181,16 +169,17 @@ public final class AmbientTourPanelController {
     private func place(awayFromBarDockedTo barEdge: FlowBarDockEdge, on screen: NSScreen?, animated: Bool = false) {
         guard let visibleFrame = (screen ?? NSScreen.main)?.visibleFrame else { return }
         let corner = AmbientTourCoachCorner.corner(awayFromBarDockedTo: barEdge)
-        let panelFrame = corner.panelFrame(panelSize: Self.panelSize, cardMargin: Self.cardMargin, inset: Self.insetFromScreenEdge, within: visibleFrame)
+        let panelFrame = corner.panelFrame(panelSize: panel.frame.size, cardMargin: Self.cardMargin, inset: Self.insetFromScreenEdge, within: visibleFrame)
         if animated && panel.isVisible {
-            // The card fades across instead of sliding, because a panel this size gliding over the whole screen
-            // would pull the eye away from the bar the person just moved.
+            // The card fades across instead of sliding, because a panel gliding over the whole screen would pull
+            // the eye away from the bar the person just moved.
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.14
                 panel.animator().alphaValue = 0
             } completionHandler: { [weak self] in
                 MainActor.assumeIsolated {
                     guard let self else { return }
+                    self.isCardAnchoredToTop = corner.isTop
                     self.layout.cardAlignment = corner.cardAlignmentInPanel
                     self.panel.setFrame(panelFrame, display: true)
                     NSAnimationContext.runAnimationGroup { context in
@@ -200,80 +189,34 @@ public final class AmbientTourPanelController {
                 }
             }
         } else {
+            isCardAnchoredToTop = corner.isTop
             layout.cardAlignment = corner.cardAlignmentInPanel
             panel.setFrame(panelFrame, display: true)
         }
     }
 
-    // MARK: Pointer: click-through
+    // MARK: Sizing
 
-    private func installPointerMonitors() {
-        guard eventMonitors.isEmpty else { return }
-        let pointerEventMask: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged]
-        if let globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: pointerEventMask, handler: { [weak self] _ in
-            MainActor.assumeIsolated { self?.updateClickThrough() }
-        }) {
-            eventMonitors.append(globalMonitor)
+    /// Keeps the panel exactly as tall as the card plus its shadow, holding the card's anchored edge still.
+    private func cardSizeChanged(_ cardSize: CGSize) {
+        guard cardSize.height > 0 else { return }
+        pendingShrink?.cancel()
+        let panelHeight = ceil(cardSize.height) + Self.cardMargin * 2
+        guard abs(panelHeight - panel.frame.height) > 0.5 else { return }
+        if panelHeight > panel.frame.height {
+            resizePanel(toHeight: panelHeight)
+        } else {
+            // The card animates to its shorter height; cutting the window first would clip that animation.
+            let shrink = DispatchWorkItem { [weak self] in self?.resizePanel(toHeight: panelHeight) }
+            pendingShrink = shrink
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: shrink)
         }
-        if let localMonitor = NSEvent.addLocalMonitorForEvents(matching: pointerEventMask, handler: { [weak self] event in
-            MainActor.assumeIsolated { self?.updateClickThrough() }
-            return event
-        }) {
-            eventMonitors.append(localMonitor)
-        }
     }
 
-    private func removePointerMonitors() {
-        eventMonitors.forEach(NSEvent.removeMonitor)
-        eventMonitors.removeAll()
-    }
-
-    /// The panel is larger than the card so the card can grow; only the card itself takes clicks.
-    private func updateClickThrough() {
-        guard dragStart == nil else { return }
-        let cardFrameOnScreen = FlowBarDockGeometry.screenRect(fromPanelContentRect: cardFrameInPanelContent, panelFrame: panel.frame)
-        panel.ignoresMouseEvents = !cardFrameOnScreen.insetBy(dx: -2, dy: -2).contains(NSEvent.mouseLocation)
-    }
-
-    // MARK: Dragging
-
-    private func cardDragChanged() {
-        let pointerLocation = NSEvent.mouseLocation
-        guard let dragStart else {
-            self.dragStart = (panel.frame.origin, pointerLocation)
-            return
-        }
-        hasBeenMovedByPerson = true
-        let proposedOrigin = CGPoint(
-            x: dragStart.panelOrigin.x + pointerLocation.x - dragStart.pointerLocation.x,
-            y: dragStart.panelOrigin.y + pointerLocation.y - dragStart.pointerLocation.y
-        )
-        panel.setFrameOrigin(proposedOrigin)
-    }
-
-    private func cardDragEnded() {
-        dragStart = nil
-        keepCardOnScreen()
-        updateClickThrough()
-    }
-
-    /// A card let go partly off a display slides back so all of it is visible.
-    private func keepCardOnScreen() {
-        let cardFrameOnScreen = FlowBarDockGeometry.screenRect(fromPanelContentRect: cardFrameInPanelContent, panelFrame: panel.frame)
-        let screenUnderCard = NSScreen.screens.first { $0.frame.intersects(cardFrameOnScreen) } ?? NSScreen.main
-        guard let visibleFrame = screenUnderCard?.visibleFrame else { return }
-        var correction = CGVector.zero
-        if cardFrameOnScreen.minX < visibleFrame.minX { correction.dx = visibleFrame.minX - cardFrameOnScreen.minX }
-        if cardFrameOnScreen.maxX > visibleFrame.maxX { correction.dx = visibleFrame.maxX - cardFrameOnScreen.maxX }
-        if cardFrameOnScreen.minY < visibleFrame.minY { correction.dy = visibleFrame.minY - cardFrameOnScreen.minY }
-        if cardFrameOnScreen.maxY > visibleFrame.maxY { correction.dy = visibleFrame.maxY - cardFrameOnScreen.maxY }
-        guard correction != .zero else { return }
-        var correctedFrame = panel.frame
-        correctedFrame.origin.x += correction.dx
-        correctedFrame.origin.y += correction.dy
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.2
-            panel.animator().setFrame(correctedFrame, display: true)
-        }
+    private func resizePanel(toHeight panelHeight: CGFloat) {
+        var frame = panel.frame
+        if isCardAnchoredToTop { frame.origin.y = frame.maxY - panelHeight }
+        frame.size.height = panelHeight
+        panel.setFrame(frame, display: true)
     }
 }

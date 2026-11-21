@@ -275,7 +275,7 @@ final class AmbientAgentTests: XCTestCase {
                 return .init(chunks: [Data("{\"results\":[{\"url\":\"https://swift.org\",\"title\":\"Swift\",\"snippet\":\"Language\",\"site\":\"swift.org\"}]}".utf8)])
             }
             if path.hasSuffix("/speech") {
-                let body = try requestJSON(request); XCTAssertEqual(body["model"]?.stringValue, "tts-1"); XCTAssertEqual(body["voice"]?.stringValue, "alloy"); XCTAssertEqual(body["response_format"]?.stringValue, "wav")
+                let body = try requestJSON(request); XCTAssertEqual(body["model"]?.stringValue, "tts-1"); XCTAssertEqual(body["voice"]?.stringValue, "ash"); XCTAssertEqual(body["response_format"]?.stringValue, "wav")
                 return .init(chunks: [wav])
             }
             XCTAssertTrue(request.value(forHTTPHeaderField: "Content-Type")?.hasPrefix("multipart/form-data; boundary=") == true)
