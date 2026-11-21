@@ -103,7 +103,7 @@ final class AmbientAgentTests: XCTestCase {
         AmbientAgentSession(credentialSource: FixedCredentialSource(), toolProviders: providers, tier: .fast, urlSession: urlSession)
     }
     func testModuleIdentityAndProviderOverride() async {
-        XCTAssertEqual(Publik.appSlug, "ambient"); XCTAssertEqual(Publik.appVersion, "0.1.2")
+        XCTAssertEqual(Publik.appSlug, "ambient"); XCTAssertEqual(Publik.appVersion, "0.1.3")
         let generatedTestKey = UUID().uuidString
         let source = PublikCredentialSource(userCredential: .init(baseURL: URL(string: "https://own.invalid/v1")!, apiKey: generatedTestKey))
         let credential = await source.credential()

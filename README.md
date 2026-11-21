@@ -9,7 +9,7 @@ It is a native macOS app (Swift, SwiftUI and AppKit), forked from [Clicky](https
 - **Talk to it.** Hold Control+Option, speak, release. Speech is recognised on your Mac when possible, and replies are spoken as they are written.
 - **A bar, not a window.** The bar docks to any of the four screen edges. Drag it where you want it.
 - **Shows you on your screen.** Ask where something is or how to do something and Ambient looks at your screen, then points or draws on it: arrows, circles, boxes, captions, even sketches. Drawings stay until you remove them.
-- **Connected apps.** Connect Gmail, Calendar, Slack, GitHub, Notion and hundreds more through Composio. You sign in to each app in your browser; you never paste an API key.
+- **Connected apps (source builds only for now).** Gmail, Calendar, Slack, GitHub, Notion and hundreds more through Composio, signed in from your browser with no API keys. The downloadable build does not include this yet: it needs the connector service, which is not hosted. See `connector/` to run it yourself.
 - **Background agents.** Ask it to start an agent for research or a coding task. The agent runs headless on your publik account while you keep working, and reports back in the bar. If you have Codex or Claude Code installed, you can ask for those by name.
 - **It learns.** Ambient remembers what matters as you use it, and you can see, edit or delete everything it knows. Skills are plain `SKILL.md` folders you can add your own to.
 - **A guided tour.** First launch walks you through each of these on your real desktop.
@@ -42,6 +42,8 @@ cd Packages/AmbientKit && swift test
 ```
 
 ## Privacy
+
+Usage counting: after you sign in, Ambient sends publik two events tied to your install key, `app_opened` at launch and `active_session` every 30 minutes while it is running. They carry the app name, version and operating system, and nothing you say, type or see. publik uses them to count weekly users, and you can turn this off in your publik account.
 
 Recordings are transcribed on your Mac when on-device recognition is available. Nothing on your screen is captured unless your request needs it, and captures exclude Ambient's own windows. Memory and skills are stored as readable files under `~/Library/Application Support/Ambient/`.
 
