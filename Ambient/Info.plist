@@ -10,6 +10,16 @@
 	<string>Ambient turns what you say into text on this Mac, so it can answer faster.</string>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>Ambient needs screen recording access to see your screen and help you.</string>
+	<key>SUFeedURL</key>
+	<string>https://publikhq.com/api/updates/ambient/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>MVQyx3qL0t0QqGpnOSAnsO/wxExJFiDQYCxf0tF/HNc=</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
+	<key>SUAutomaticallyUpdate</key>
+	<true/>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

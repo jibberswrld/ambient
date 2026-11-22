@@ -9,14 +9,27 @@
 
 /* Begin PBXBuildFile section */
         A11000000000000000000001 /* AmbientKit in Frameworks */ = {isa = PBXBuildFile; productRef = A11000000000000000000002 /* AmbientKit */; };
+        A11000000000000000000004 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A11000000000000000000005 /* Sparkle */; };
 /* End PBXBuildFile section */
 
 /* Begin XCLocalSwiftPackageReference section */
         A11000000000000000000003 /* AmbientKit */ = {isa = XCLocalSwiftPackageReference; relativePath = Packages/AmbientKit; };
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+        A11000000000000000000006 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+            isa = XCRemoteSwiftPackageReference;
+            repositoryURL = "https://github.com/sparkle-project/Sparkle";
+            requirement = {
+                kind = upToNextMajorVersion;
+                minimumVersion = 2.10.1;
+            };
+        };
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
         A11000000000000000000002 /* AmbientKit */ = {isa = XCSwiftPackageProductDependency; productName = AmbientKit; };
+        A11000000000000000000005 /* Sparkle */ = {isa = XCSwiftPackageProductDependency; package = A11000000000000000000006 /* XCRemoteSwiftPackageReference "Sparkle" */; productName = Sparkle; };
 /* End XCSwiftPackageProductDependency section */
 
 /* Begin PBXContainerItemProxy section */
@@ -80,6 +93,7 @@
 			buildActionMask = 2147483647;
 			files = (
                 A11000000000000000000001 /* AmbientKit in Frameworks */,
+                A11000000000000000000004 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -141,6 +155,7 @@
 			name = "Ambient";
 			packageProductDependencies = (
                 A11000000000000000000002 /* AmbientKit */,
+                A11000000000000000000005 /* Sparkle */,
 			);
 			productName = "Ambient";
 			productReference = 28F22CBF2F56440300A0FC59 /* Ambient.app */;
@@ -226,6 +241,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
                 A11000000000000000000003 /* AmbientKit */,
+                A11000000000000000000006 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 28F22CC02F56440300A0FC59 /* Products */;
@@ -429,7 +445,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Ambient/Ambient.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = "$(MARKETING_VERSION)";
 				DEVELOPMENT_TEAM = Z63L6KDQ9K;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -446,7 +462,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.1.5;
+				MARKETING_VERSION = 0.1.6;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.jabir.ambient";
 				PRODUCT_NAME = Ambient;
 				REGISTER_APP_GROUPS = YES;
@@ -467,7 +483,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Ambient/Ambient.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = "$(MARKETING_VERSION)";
 				DEVELOPMENT_TEAM = Z63L6KDQ9K;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -484,7 +500,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.1.5;
+				MARKETING_VERSION = 0.1.6;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.jabir.ambient";
 				PRODUCT_NAME = Ambient;
 				REGISTER_APP_GROUPS = YES;
@@ -506,7 +522,7 @@
 				DEVELOPMENT_TEAM = Z63L6KDQ9K;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.2;
-				MARKETING_VERSION = 0.1.5;
+				MARKETING_VERSION = 0.1.6;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.jabir.ambient.tests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -527,7 +543,7 @@
 				DEVELOPMENT_TEAM = Z63L6KDQ9K;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.2;
-				MARKETING_VERSION = 0.1.5;
+				MARKETING_VERSION = 0.1.6;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.jabir.ambient.tests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -546,7 +562,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = Z63L6KDQ9K;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 0.1.5;
+				MARKETING_VERSION = 0.1.6;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.jabir.ambient.uitests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -565,7 +581,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = Z63L6KDQ9K;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 0.1.5;
+				MARKETING_VERSION = 0.1.6;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.jabir.ambient.uitests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
