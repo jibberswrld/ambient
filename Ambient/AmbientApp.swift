@@ -334,19 +334,16 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
                 NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!)
             }
         case .accessibility:
-            if permissionsModel.status(of: .accessibility) == .deniedInSystemSettings {
-                AmbientPermissionHelper.openAccessibilitySettings()
-            } else {
-                UserDefaults.standard.set(true, forKey: "ambient.accessibilityRequested")
-                AmbientPermissionHelper.requestAccessibilityPermission()
-            }
+            // Always ask the system first: asking is what puts Ambient in the System Settings list, and the list
+            // can be empty even after an earlier ask (a reset, or a grant made to a differently signed build).
+            UserDefaults.standard.set(true, forKey: "ambient.accessibilityRequested")
+            AmbientPermissionHelper.requestAccessibilityPermission()
         case .screenRecording:
-            if permissionsModel.status(of: .screenRecording) == .deniedInSystemSettings {
-                AmbientPermissionHelper.openScreenRecordingSettings()
-            } else {
-                UserDefaults.standard.set(true, forKey: "ambient.screenRecordingRequested")
-                AmbientPermissionHelper.requestScreenRecordingPermission()
-            }
+            let wasAlreadyAsked = permissionsModel.status(of: .screenRecording) == .deniedInSystemSettings
+            UserDefaults.standard.set(true, forKey: "ambient.screenRecordingRequested")
+            // macOS shows this prompt once; later calls are silent but still list Ambient in System Settings.
+            _ = CGRequestScreenCaptureAccess()
+            if wasAlreadyAsked { AmbientPermissionHelper.openScreenRecordingSettings() }
         case .speechRecognition:
             if AmbientPermissionHelper.speechRecognitionAuthorizationStatus() == .notDetermined {
                 permissionsModel.statuses[.speechRecognition] = .waiting

@@ -25,7 +25,7 @@ Ambient asks for Microphone, Accessibility (for the global shortcut) and Screen 
 
 ## Build from source
 
-Requires Xcode and an Apple Development signing identity.
+Requires Xcode and a Developer ID Application signing identity.
 
 ```bash
 ./scripts/run.sh

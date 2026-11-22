@@ -12,7 +12,6 @@ enum PermissionRequestPresentationDestination: Equatable {
 @MainActor
 enum AmbientPermissionHelper {
     private static var hasAttemptedAccessibilitySystemPromptDuringCurrentLaunch = false
-    private static var hasAttemptedScreenRecordingSystemPromptDuringCurrentLaunch = false
     private static let hasPreviouslyConfirmedScreenRecordingPermissionUserDefaultsKey = "ambient.hasPreviouslyConfirmedScreenRecordingPermission"
 
     /// Returns true when the Mac currently has more than one connected display.
@@ -70,11 +69,27 @@ enum AmbientPermissionHelper {
 
     /// Returns true if Screen Recording permission is granted.
     static func hasScreenRecordingPermission() -> Bool {
-        let hasScreenRecordingPermissionNow = CGPreflightScreenCaptureAccess()
+        // CGPreflightScreenCaptureAccess() keeps the answer it gave at launch, so a grant made while the app is
+        // running only shows through the window list, which the window server checks on every call.
+        let hasScreenRecordingPermissionNow = CGPreflightScreenCaptureAccess() || canReadOtherAppsWindowTitles()
         if hasScreenRecordingPermissionNow {
             UserDefaults.standard.set(true, forKey: hasPreviouslyConfirmedScreenRecordingPermissionUserDefaultsKey)
         }
         return hasScreenRecordingPermissionNow
+    }
+
+    /// Other apps' window titles are only handed over with Screen Recording permission. Asking never prompts.
+    private static func canReadOtherAppsWindowTitles() -> Bool {
+        guard let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
+                as? [[String: Any]] else { return false }
+        let ownProcessIdentifier = ProcessInfo.processInfo.processIdentifier
+        return windows.contains { window in
+            // Layer 0 is ordinary app windows; the Dock, menu bar and system overlays are named without permission.
+            guard window[kCGWindowLayer as String] as? Int == 0,
+                  let ownerProcessIdentifier = window[kCGWindowOwnerPID as String] as? pid_t,
+                  ownerProcessIdentifier != ownProcessIdentifier else { return false }
+            return window[kCGWindowName as String] is String
+        }
     }
 
     /// Returns true when the app should proceed with session launch without showing
@@ -97,29 +112,6 @@ enum AmbientPermissionHelper {
 
     static func clearPreviouslyConfirmedScreenRecordingPermission() {
         UserDefaults.standard.removeObject(forKey: hasPreviouslyConfirmedScreenRecordingPermissionUserDefaultsKey)
-    }
-
-    /// Prompts the system dialog for Screen Recording permission.
-    /// Uses the system prompt once, then opens System Settings on later attempts so
-    /// the user never gets the prompt and the Settings pane at the same time.
-    @discardableResult
-    static func requestScreenRecordingPermission() -> PermissionRequestPresentationDestination {
-        let presentationDestination = permissionRequestPresentationDestination(
-            hasPermissionNow: hasScreenRecordingPermission(),
-            hasAttemptedSystemPrompt: hasAttemptedScreenRecordingSystemPromptDuringCurrentLaunch
-        )
-
-        switch presentationDestination {
-        case .alreadyGranted:
-            return .alreadyGranted
-        case .systemPrompt:
-            hasAttemptedScreenRecordingSystemPromptDuringCurrentLaunch = true
-            _ = CGRequestScreenCaptureAccess()
-        case .systemSettings:
-            openScreenRecordingSettings()
-        }
-
-        return presentationDestination
     }
 
     /// Opens System Settings to the Screen Recording pane.

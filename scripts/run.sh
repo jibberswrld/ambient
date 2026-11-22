@@ -5,8 +5,9 @@ repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 derived_data_path="$repository_root/build"
 app_path="$derived_data_path/Build/Products/Debug/Ambient.app"
 
-# A development certificate and fixed bundle ID/path preserve the signing
-# requirement macOS uses for privacy grants; never fall back to ad-hoc signing.
+# Sign with the same Developer ID identity as the released app. macOS ties privacy grants to the
+# signing requirement, so a development-signed build would take the grants away from the installed
+# app (the toggles stay on in System Settings but the app is refused). Never fall back to ad-hoc signing.
 xcodebuild \
     -project "$repository_root/Ambient.xcodeproj" \
     -scheme Ambient \
@@ -14,13 +15,14 @@ xcodebuild \
     -destination 'platform=macOS' \
     -derivedDataPath "$derived_data_path" \
     DEVELOPMENT_TEAM=Z63L6KDQ9K \
-    CODE_SIGN_IDENTITY='Apple Development' \
+    CODE_SIGN_STYLE=Manual \
+    CODE_SIGN_IDENTITY='Developer ID Application' \
     build
 
 signature_details="$(codesign -dv --verbose=4 "$app_path" 2>&1)"
 if ! grep -q '^TeamIdentifier=Z63L6KDQ9K$' <<< "$signature_details" \
-    || ! grep -q '^Authority=Apple Development:' <<< "$signature_details"; then
-    echo 'Ambient must be signed with an Apple Development identity for Z63L6KDQ9K.' >&2
+    || ! grep -q '^Authority=Developer ID Application:' <<< "$signature_details"; then
+    echo 'Ambient must be signed with the Developer ID Application identity for Z63L6KDQ9K.' >&2
     exit 1
 fi
 codesign --verify --strict "$app_path"
