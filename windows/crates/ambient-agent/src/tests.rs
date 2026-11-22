@@ -136,6 +136,10 @@ fn serve(mut socket: TcpStream, handler: &dyn Fn(Request) -> Response) {
         let count = socket.read(&mut buffer).unwrap_or_else(|error| {
             panic!("request read failed after {} bytes: {error}", bytes.len())
         });
+        // A turn cancelled at once closes its connection before sending anything; that is not a failure.
+        if count == 0 && bytes.is_empty() {
+            return;
+        }
         assert_ne!(count, 0);
         bytes.extend_from_slice(&buffer[..count]);
         if let Some(position) = bytes.windows(4).position(|bytes| bytes == b"\r\n\r\n") {
