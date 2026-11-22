@@ -3,6 +3,7 @@ import AVFoundation
 import Combine
 import ServiceManagement
 import Speech
+import Sparkle
 import AmbientContracts
 import AmbientBackground
 import AmbientUI
@@ -51,10 +52,14 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
     private var recordingStartTask: Task<Void, Never>?
     private var previousPermissionsWereGranted = false
     private var isUpdatingSettings = false
+    /// Sparkle reads the publik update feed from Info.plist, checks at launch and daily, downloads in the background and asks before relaunching.
+    private var updaterController: SPUStandardUpdaterController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Unit tests host the app executable but must not start a second live session.
         guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
+        // Started before the runtime so an install that cannot start can still receive the fix.
+        updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
         do {
             let runtime = try AmbientRuntime()
             self.runtime = runtime
@@ -93,6 +98,7 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
             self?.submit(text: text)
         }
         model.onOpenSettings = { [weak self] in self?.openSettings() }
+        model.onCheckForUpdates = { [weak self] in self?.updaterController?.checkForUpdates(nil) }
         model.onCancelBackgroundTask = { [weak runtime] identifier in
             guard let runtime else { return }
             Task { await runtime.backgroundTaskStore.cancel(taskID: identifier) }
@@ -198,6 +204,8 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
         replayTour.target = self
         let clearDrawing = menu.addItem(withTitle: "Clear Drawing", action: #selector(clearDrawingFromMenu), keyEquivalent: "")
         clearDrawing.target = self
+        let checkForUpdates = menu.addItem(withTitle: "Check for Updates…", action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)), keyEquivalent: "")
+        checkForUpdates.target = updaterController
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Ambient", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         item.menu = menu

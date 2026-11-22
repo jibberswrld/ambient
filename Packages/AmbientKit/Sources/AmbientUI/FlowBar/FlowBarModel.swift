@@ -186,6 +186,7 @@ public final class FlowBarModel {
     public var onCancelTurn: (() -> Void)?
     public var onSubmitTypedText: ((String) -> Void)?
     public var onOpenSettings: (() -> Void)?
+    public var onCheckForUpdates: (() -> Void)?
     public var onCancelBackgroundTask: ((UUID) -> Void)?
     public var onDismissBackgroundTask: ((UUID) -> Void)?
     public var onOpenBackgroundTaskTranscript: ((UUID) -> Void)?
