@@ -34,7 +34,7 @@ jobs:
           node-version: 22
 
       - name: Test the Rust subsystems on Windows
-        run: cargo test --workspace --exclude ambient
+        run: cargo test --workspace
 
       - name: Test and build the interface
         if: hashFiles('windows/package.json') != ''
