@@ -1,0 +1,374 @@
+/* The tour's coach card. Measurements follow AmbientTourViews.swift (card 340 wide, 16 padding, 22 corners). */
+
+.tour-window {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  padding: 28px;
+}
+.tour-window.is-top {
+  align-items: flex-start;
+}
+.tour-window.is-bottom {
+  align-items: flex-end;
+}
+
+.tour-coach-card {
+  width: 340px;
+  flex: none;
+  padding: 16px;
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.tour-coach-card:active {
+  cursor: grabbing;
+}
+
+/* The next lesson arrives from the trailing side, like a page turning. Reduce Motion keeps only the fade. */
+.tour-lesson {
+  display: flex;
+  flex-direction: column;
+  animation: tour-step-in 380ms var(--ease-out-strong) both;
+}
+@keyframes tour-step-in {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  @keyframes tour-step-in {
+    from {
+      opacity: 0;
+    }
+  }
+}
+.is-still-capture .tour-lesson {
+  animation: none;
+}
+
+.tour-header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 26px;
+  margin-bottom: 12px;
+}
+.tour-progress {
+  display: inline-flex;
+  gap: 3px;
+}
+.tour-progress-segment {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.14);
+  transition: background-color 300ms ease-out;
+}
+.tour-progress-segment.is-current {
+  background: rgb(255 255 255 / 0.62);
+}
+.tour-progress-segment.is-done {
+  background: var(--ember);
+}
+.tour-step-count {
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--on-smoke-tertiary);
+  white-space: nowrap;
+}
+.tour-header-spacer {
+  flex: 1;
+}
+/* Quiet buttons draw their label inset by their own padding; pulling the group out lines the text up with the edge. */
+.tour-header-buttons {
+  display: flex;
+  margin-right: -10px;
+}
+
+.tour-lesson-title {
+  margin: 0 0 4px;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  color: var(--on-smoke-primary);
+}
+.tour-lesson-body {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--on-smoke-secondary);
+  animation: flow-bar-fade-in 200ms ease-out both;
+}
+
+.tour-phrase-block,
+.tour-edge-diagram,
+.tour-cheat-sheet {
+  border-radius: var(--radius-nested);
+  background: rgb(255 255 255 / 0.06);
+  box-shadow: inset 0 0 0 1px var(--on-smoke-hairline);
+}
+.tour-phrase-block {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 12px;
+  padding: 10px 12px;
+}
+.tour-phrase-lead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--on-smoke-tertiary);
+}
+.tour-phrase {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--on-smoke-primary);
+}
+
+.tour-edge-diagram {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 8px;
+}
+.tour-edge-diagram p {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--on-smoke-secondary);
+}
+
+/* A miniature Windows screen: warm wallpaper, a taskbar along the bottom, the bar on its edge. */
+.tour-edge-picture {
+  position: relative;
+  flex: none;
+  width: 132px;
+  height: 84px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgb(84 69 61), rgb(33 31 33));
+}
+.tour-edge-picture-taskbar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 7px;
+  background: rgb(255 255 255 / 0.14);
+}
+.tour-edge-picture-bar {
+  position: absolute;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.3);
+  transition:
+    width var(--spring-surface-morph-duration) var(--spring-surface-morph),
+    height var(--spring-surface-morph-duration) var(--spring-surface-morph),
+    background-color 200ms ease-out;
+}
+.tour-edge-picture-bar.is-selected {
+  background: var(--ember);
+  box-shadow: 0 0 8px rgb(255 149 74 / 0.7);
+}
+.tour-edge-picture-bar.edge-bottom,
+.tour-edge-picture-bar.edge-top {
+  left: 50%;
+  width: 18px;
+  height: 4px;
+  translate: -50% 0;
+}
+.tour-edge-picture-bar.edge-bottom {
+  bottom: 13px;
+}
+.tour-edge-picture-bar.edge-top {
+  top: 6px;
+}
+.tour-edge-picture-bar.edge-left,
+.tour-edge-picture-bar.edge-right {
+  top: calc(50% - 3px);
+  width: 4px;
+  height: 18px;
+  translate: 0 -50%;
+}
+.tour-edge-picture-bar.edge-left {
+  left: 6px;
+}
+.tour-edge-picture-bar.edge-right {
+  right: 6px;
+}
+.tour-edge-picture-bar.edge-bottom.is-selected,
+.tour-edge-picture-bar.edge-top.is-selected {
+  width: 30px;
+  height: 6px;
+}
+.tour-edge-picture-bar.edge-left.is-selected,
+.tour-edge-picture-bar.edge-right.is-selected {
+  width: 6px;
+  height: 30px;
+}
+
+.tour-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--on-smoke-hairline);
+}
+.tour-status-indicator {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+.tour-status-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--on-smoke-primary);
+  animation: flow-bar-fade-in 200ms ease-out both;
+}
+.tour-status-row.tone-waiting .tour-status-text {
+  font-weight: 400;
+  color: var(--on-smoke-secondary);
+}
+.tour-waiting-ring {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.25px var(--on-smoke-tertiary);
+}
+.tour-nudge-icon {
+  color: var(--on-smoke-secondary);
+}
+.tour-problem-icon {
+  color: var(--alert);
+}
+/* The small ember confirmation: the check settles in while a ring of light spreads from it and fades. */
+.tour-done-mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--ember);
+  color: var(--ember-ink);
+  box-shadow: 0 0 8px rgb(255 149 74 / 0.6);
+  animation: tour-done-settle 340ms var(--ease-out-strong) both;
+}
+.tour-done-mark::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px var(--ember);
+  animation: tour-done-ring 520ms ease-out both;
+}
+@keyframes tour-done-settle {
+  from {
+    opacity: 0;
+    transform: scale(0.55);
+  }
+}
+@keyframes tour-done-ring {
+  from {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(2.1);
+  }
+}
+.is-still-capture .tour-done-mark,
+.is-still-capture .tour-done-mark::after {
+  animation: none;
+}
+.is-still-capture .tour-done-mark::after {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tour-done-mark {
+    animation: none;
+  }
+  .tour-done-mark::after {
+    display: none;
+  }
+}
+
+/* Finish ------------------------------------------------------------------------------------------------------------ */
+
+.tour-cheat-sheet {
+  display: flex;
+  flex-direction: column;
+  margin-top: 12px;
+}
+.tour-cheat-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 6px 12px;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--on-smoke-primary);
+}
+.tour-cheat-row + .tour-cheat-row {
+  border-top: 1px solid var(--on-smoke-hairline);
+}
+.tour-cheat-leading {
+  display: flex;
+  align-items: center;
+  flex: none;
+  width: 52px;
+}
+.tour-resting-bar-picture {
+  width: 22px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.22);
+  box-shadow: inset 0 0 0 0.75px rgb(255 255 255 / 0.32);
+}
+.tour-tray-icon {
+  margin-left: 3px;
+  color: var(--on-smoke-secondary);
+}
+.tour-things-to-try-label {
+  margin: 14px 0 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--on-smoke-tertiary);
+}
+.tour-things-to-try {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--on-smoke-primary);
+}
+.tour-finish-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}

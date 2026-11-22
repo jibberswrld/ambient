@@ -1,0 +1,320 @@
+/* Shared controls. Every interactive element: pointer cursor, a hover fill that says "clickable", a small press. */
+
+.capsule-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  flex: none;
+  height: 30px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--hover-duration) ease-out,
+    color var(--hover-duration) ease-out,
+    transform var(--press-duration) ease-out;
+}
+.capsule-button.is-compact {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+.capsule-button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.capsule-button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.capsule-button-icon {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+.capsule-button.is-compact .capsule-button-icon {
+  width: 11px;
+  height: 11px;
+}
+
+.capsule-button.prominence-primary {
+  background: var(--ember);
+  color: var(--ember-ink);
+  font-weight: 600;
+}
+.capsule-button.prominence-primary:hover:not(:disabled) {
+  background: rgb(255 149 74 / 0.88);
+}
+
+.capsule-button.prominence-secondary.surface-smokedGlass {
+  background: var(--on-smoke-fill-hover);
+  color: var(--on-smoke-primary);
+}
+.capsule-button.prominence-secondary.surface-smokedGlass:hover:not(:disabled) {
+  background: var(--on-smoke-fill-pressed);
+}
+.capsule-button.prominence-quiet.surface-smokedGlass {
+  background: transparent;
+  color: var(--on-smoke-secondary);
+}
+.capsule-button.prominence-quiet.surface-smokedGlass:hover:not(:disabled) {
+  background: var(--on-smoke-fill);
+  color: var(--on-smoke-primary);
+}
+
+.capsule-button.prominence-secondary.surface-window {
+  background: var(--card-background);
+  color: var(--primary-text);
+  box-shadow: inset 0 0 0 1px var(--card-hairline);
+}
+.capsule-button.prominence-secondary.surface-window:hover:not(:disabled) {
+  background: var(--selected-row);
+}
+.capsule-button.prominence-quiet.surface-window {
+  background: transparent;
+  color: var(--secondary-text);
+}
+.capsule-button.prominence-quiet.surface-window:hover:not(:disabled) {
+  background: var(--row-hover);
+  color: var(--primary-text);
+}
+
+.glass-icon-button {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--on-smoke-secondary);
+  cursor: pointer;
+  transition:
+    background-color var(--hover-duration) ease-out,
+    color var(--hover-duration) ease-out,
+    transform var(--press-duration) ease-out;
+}
+.glass-icon-button:hover {
+  background: var(--on-smoke-fill-hover);
+  color: var(--on-smoke-primary);
+}
+.glass-icon-button:active {
+  transform: scale(0.9);
+}
+
+.keycap-row {
+  display: inline-flex;
+  align-items: center;
+}
+.keycap {
+  display: inline-grid;
+  place-items: center;
+  box-sizing: border-box;
+  font-family: var(--font-text);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  color: var(--on-smoke-primary);
+  background: rgb(255 255 255 / 0.11);
+  box-shadow:
+    inset 0 0 0 0.75px rgb(255 255 255 / 0.16),
+    0 1px 0 rgb(0 0 0 / 0.35);
+  transition:
+    background-color 100ms ease-out,
+    color 100ms ease-out,
+    transform 100ms ease-out;
+}
+.keycap.on-window {
+  color: var(--primary-text);
+  background: var(--card-background);
+  box-shadow:
+    inset 0 0 0 1px var(--card-hairline),
+    0 1px 0 rgb(0 0 0 / 0.08);
+}
+/* The keys light up while they are really held. */
+.keycap.is-pressed {
+  color: var(--ember-ink);
+  background: var(--ember);
+  box-shadow: none;
+  transform: translateY(1px);
+}
+
+.switch-control {
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--quiet-fill);
+  box-shadow: inset 0 0 0 1px var(--card-hairline);
+  cursor: pointer;
+  transition: background-color 160ms ease-out;
+}
+.switch-control.is-on {
+  background: var(--ember);
+  box-shadow: none;
+}
+.switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2.5px rgb(0 0 0 / 0.24);
+  transition: transform var(--spring-switch-duration) var(--spring-switch);
+}
+.switch-control.is-on .switch-thumb {
+  transform: translateX(14px);
+}
+
+.ambient-mark {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgb(51 50 49), rgb(16 15 15));
+  box-shadow: inset 0 0 0 0.75px rgb(255 255 255 / 0.16);
+}
+.ambient-mark-ember {
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--ember-core), var(--ember) 75%);
+}
+
+.ember-indicator {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+}
+.ember-indicator > * {
+  grid-area: 1 / 1;
+}
+.ember-glow {
+  border-radius: 50%;
+  background: rgb(255 149 74 / 0.29);
+  filter: blur(3px);
+}
+.ember-core {
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--ember-core), var(--ember) 80%);
+  box-shadow: 0 0 6px rgb(255 149 74 / 0.85);
+}
+/* One breath every 1.6 seconds: calm, but well away from the slow range that can unsettle people. */
+.ember-indicator.activity-thinking .ember-glow,
+.ember-indicator.activity-working .ember-glow {
+  animation: ember-glow-breath 1.6s ease-in-out infinite;
+}
+.ember-indicator.activity-thinking .ember-core {
+  animation: ember-core-breath 1.6s ease-in-out infinite;
+}
+.ember-orbit {
+  animation: ember-orbit-spin 1.2s linear infinite;
+}
+@keyframes ember-glow-breath {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes ember-core-breath {
+  0%,
+  100% {
+    transform: scale(0.86);
+  }
+  50% {
+    transform: scale(1);
+  }
+}
+@keyframes ember-orbit-spin {
+  from {
+    transform: rotate(-90deg);
+  }
+  to {
+    transform: rotate(270deg);
+  }
+}
+
+.running-arc {
+  flex: none;
+  animation: running-arc-spin 1s linear infinite;
+}
+@keyframes running-arc-spin {
+  from {
+    transform: rotate(-90deg);
+  }
+  to {
+    transform: rotate(270deg);
+  }
+}
+
+.pill-divider {
+  flex: none;
+  width: 1px;
+  height: 16px;
+  background: var(--on-smoke-hairline);
+}
+.pill-divider.is-upright {
+  width: 18px;
+  height: 1px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Still captures and Reduce Motion: indicators rest at their middle values instead of looping. */
+.is-still-capture .ember-glow,
+.is-still-capture .ember-core,
+.is-still-capture .ember-orbit,
+.is-still-capture .running-arc {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ember-glow,
+  .ember-core,
+  .ember-orbit,
+  .running-arc {
+    animation: none !important;
+  }
+}
+
+@media (forced-colors: active) {
+  .capsule-button,
+  .glass-icon-button,
+  .switch-control,
+  .keycap {
+    border: 1px solid ButtonText;
+  }
+  .ambient-mark {
+    border: 1px solid CanvasText;
+  }
+  .ambient-mark-ember {
+    background: Highlight;
+    forced-color-adjust: none;
+  }
+  .capsule-button.prominence-primary,
+  .switch-control.is-on,
+  .keycap.is-pressed {
+    background: Highlight;
+    color: HighlightText;
+    forced-color-adjust: none;
+  }
+}

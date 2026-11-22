@@ -1,0 +1,1114 @@
+/*
+  Settings window, ported from AmbientSettingsView.swift / AmbientSettingsPages.swift.
+  Measurements follow the Mac window at 820 × 580: a 208 px sidebar, a hairline, then pages with a 22 px title, 22 px
+  between blocks, 12 px card radius and 14 px row insets. Colours come only from the window tokens in tokens.css.
+*/
+
+.settings-window {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--window-background);
+  color: var(--primary-text);
+  font-family: var(--font-text);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.settings-window p,
+.settings-window h1,
+.settings-window h2,
+.settings-window ul {
+  margin: 0;
+  padding: 0;
+}
+
+.tabular-figures {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------------------------------------------------------- */
+/* Sidebar                                                                                                           */
+/* ---------------------------------------------------------------------------------------------------------------- */
+
+.settings-sidebar {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  width: 208px;
+  height: 100%;
+  padding: 0 10px;
+  background: var(--sidebar-background);
+  border-right: 1px solid var(--card-hairline);
+}
+
+/* Windows draws a native title bar above the page, so the mark starts near the top instead of below traffic lights.
+   Its centre lines up with the page title's centre. */
+.settings-sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 20px;
+  margin: 22px 0 18px 12px;
+}
+.settings-sidebar-brand-name {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  color: var(--primary-text);
+}
+
+.settings-sidebar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  list-style: none;
+}
+
+.settings-sidebar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--primary-text);
+  font-size: 13px;
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--hover-duration) ease-out,
+    color var(--hover-duration) ease-out;
+}
+.settings-sidebar-row:hover {
+  background: var(--row-hover);
+}
+.settings-sidebar-row:active {
+  background: var(--selected-row);
+}
+.settings-sidebar-row.is-selected {
+  background: var(--selected-row);
+  font-weight: 600;
+}
+/* Lucide icons are 15 px in an 18 px column, so titles line up whatever the glyph's width. */
+.settings-sidebar-icon {
+  flex: none;
+  margin-inline: 1.5px;
+  color: var(--secondary-text);
+  transition: color var(--hover-duration) ease-out;
+}
+.settings-sidebar-row.is-selected .settings-sidebar-icon {
+  color: var(--accent-text);
+}
+
+.settings-quit-row {
+  margin-top: auto;
+  margin-bottom: 12px;
+  color: var(--secondary-text);
+}
+.settings-quit-row .settings-sidebar-icon {
+  margin-inline: 2px;
+}
+.settings-quit-row:hover,
+.settings-quit-row:hover .settings-sidebar-icon {
+  color: var(--primary-text);
+}
+
+/* ---------------------------------------------------------------------------------------------------------------- */
+/* Page scaffolding                                                                                                  */
+/* ---------------------------------------------------------------------------------------------------------------- */
+
+.settings-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--window-background);
+}
+
+.settings-page {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+/* Pages scroll inside the right pane, under a thin, quiet scrollbar; the sidebar never moves. */
+.settings-page.is-scrolling {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--card-hairline) transparent;
+}
+.settings-page.is-scrolling:hover {
+  scrollbar-color: var(--tertiary-text) transparent;
+}
+
+.settings-page-column {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  width: 100%;
+  /* As on the Mac, a wider window keeps a comfortable reading measure instead of stretching every row. */
+  max-width: 640px;
+  padding: 18px 36px 32px;
+}
+/* Activity's two panes use the extra width of a larger window and fill its height. */
+.settings-page-column.is-wide {
+  flex: 1;
+  min-height: 0;
+  max-width: 1040px;
+}
+
+.settings-page-header {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+.settings-page-heading {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.settings-page-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 28px;
+  letter-spacing: -0.45px;
+  color: var(--primary-text);
+}
+.settings-page-subtitle {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--secondary-text);
+}
+.settings-page-accessory {
+  flex: none;
+}
+
+.settings-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.settings-stack.is-label-and-list {
+  gap: 10px;
+}
+/* "3 connected" sits closer to the list it counts than to the search field above it. */
+.settings-label-above-list {
+  margin-bottom: -6px;
+}
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.settings-section-label {
+  padding-left: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  color: var(--secondary-text);
+}
+
+.settings-card {
+  border: 1px solid var(--card-hairline);
+  border-radius: 12px;
+  background: var(--card-background);
+}
+.settings-list-card {
+  overflow: hidden;
+}
+
+.settings-group-divider {
+  height: 1px;
+  margin-left: 14px;
+  background: var(--card-hairline);
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 50px;
+  padding: 12px 14px;
+}
+.settings-row-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.settings-row-title {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 17px;
+  color: var(--primary-text);
+}
+.settings-row-detail {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--secondary-text);
+}
+.settings-row-control {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+
+/* ---------------------------------------------------------------------------------------------------------------- */
+/* Lists                                                                                                             */
+/* ---------------------------------------------------------------------------------------------------------------- */
+
+.settings-list-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 0 14px;
+  transition: background-color var(--hover-duration) ease-out;
+}
+/* Rows are not clickable as a whole: the hover fill only says which row the revealed button belongs to. */
+.settings-list-row:hover {
+  background: var(--row-hover);
+}
+/* The hairline between rows starts at the row's content, like the Mac's inset divider. */
+.settings-list-row + .settings-list-row::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 14px;
+  right: 0;
+  height: 1px;
+  background: var(--card-hairline);
+}
+.settings-list-row-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.settings-list-row-title {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 17px;
+  color: var(--primary-text);
+}
+.settings-list-row-trailing {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+
+/* Destructive or rarely needed buttons appear only under the pointer, or when the keyboard reaches them. */
+.reveal-on-row-hover {
+  display: inline-flex;
+  flex: none;
+  opacity: 0;
+  transition: opacity var(--hover-duration) ease-out;
+}
+.settings-list-row:hover .reveal-on-row-hover,
+.settings-list-row:focus-within .reveal-on-row-hover {
+  opacity: 1;
+}
+
+.settings-icon-tile {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--quiet-fill);
+  color: var(--secondary-text);
+}
+
+.round-icon-button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--quiet-fill);
+  color: var(--secondary-text);
+  cursor: pointer;
+  transition:
+    background-color var(--hover-duration) ease-out,
+    color var(--hover-duration) ease-out,
+    transform var(--press-duration) ease-out;
+}
+.round-icon-button:hover {
+  background: var(--selected-row);
+  color: var(--alert-deep);
+}
+.round-icon-button:active {
+  transform: scale(0.9);
+}
+
+.settings-loading-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 52px;
+  padding: 0 14px;
+  animation: settings-loading-pulse 0.9s ease-in-out infinite alternate both;
+}
+.settings-loading-tile {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--quiet-fill);
+}
+.settings-loading-line {
+  flex: none;
+  height: 10px;
+  border-radius: 4px;
+  background: var(--quiet-fill);
+}
+.settings-loading-spacer {
+  flex: 1;
+}
+.settings-loading-capsule {
+  flex: none;
+  width: 72px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--quiet-fill);
+}
+@keyframes settings-loading-pulse {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.45;
+  }
+}
+
+.settings-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 44px 0;
+  text-align: center;
+}
+.settings-empty-state-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--quiet-fill);
+  color: var(--tertiary-text);
+}
+.settings-empty-state.is-error .settings-empty-state-icon {
+  color: var(--alert-deep);
+}
+.settings-empty-state-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--primary-text);
+}
+.settings-empty-state-message {
+  max-width: 300px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--secondary-text);
+}
+.settings-empty-state-action {
+  margin-top: 4px;
+}
+
+.settings-inline-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--alert-deep);
+}
+.settings-inline-error svg {
+  flex: none;
+}
+
+/* ---------------------------------------------------------------------------------------------------------------- */
+/* Fields                                                                                                            */
+/* ---------------------------------------------------------------------------------------------------------------- */
+
+.settings-field {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--card-hairline);
+  border-radius: 9px;
+  background: var(--card-background);
+  cursor: text;
+  transition:
+    border-color var(--hover-duration) ease-out,
+    box-shadow var(--hover-duration) ease-out;
+}
+.settings-field:hover {
+  border-color: color-mix(in srgb, var(--card-hairline), var(--primary-text) 8%);
+}
+/* The whole field takes the focus ring, not the bare input inside it. */
+.settings-field:focus-within {
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 3px rgb(255 149 74 / 0.14);
+}
+.settings-field-icon {
+  flex: none;
+  color: var(--tertiary-text);
+}
+.settings-field-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--primary-text);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+  appearance: none;
+}
+.settings-field-input:focus-visible {
+  outline: none;
+}
+.settings-field-input::placeholder {
+  color: var(--tertiary-text);
+}
+/* Escape clears the search; the engine's own clear glyph would be a second, foreign-looking control. */
+.settings-field-input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+/* ---------------------------------------------------------------------------------------------------------------- */
+/* General                                                                                                           */
+/* ---------------------------------------------------------------------------------------------------------------- */
+
+.shortcut-picker {
+  display: flex;
+  gap: 4px;
+}
+.shortcut-choice {
+  display: inline-flex;
+  padding: 5px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--card-hairline);
+  cursor: pointer;
+  transition:
+    background-color var(--hover-duration) ease-out,
+    box-shadow var(--hover-duration) ease-out,
+    transform var(--press-duration) ease-out;
+}
+.shortcut-choice:hover {
+  background: var(--row-hover);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--card-hairline), var(--primary-text) 10%);
+}
+.shortcut-choice:active {
+  transform: scale(0.96);
+}
+.shortcut-choice.is-selected {
+  background: rgb(255 149 74 / 0.16);
+  box-shadow: inset 0 0 0 1.5px rgb(255 149 74 / 0.9);
+}
+
+.edge-picker {
+  position: relative;
+  flex: none;
+  width: 132px;
+  height: 84px;
+}
+.edge-picker-screen {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgb(84 69 61), rgb(33 31 33));
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.05);
+}
+/* The taskbar, so bottom reads as bottom: a translucent strip with a few centred icons, as on Windows 11. */
+.edge-picker-taskbar {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2.5px;
+  height: 8px;
+  background: rgb(255 255 255 / 0.12);
+}
+.edge-picker-taskbar-icon {
+  width: 3.5px;
+  height: 3.5px;
+  border-radius: 1px;
+  background: rgb(255 255 255 / 0.38);
+}
+
+/* Each target is much larger than the bar drawn inside it, so the small picture is still easy to hit. */
+.edge-picker-target {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  transform: translate(-50%, -50%);
+}
+.edge-picker-target:focus-visible {
+  outline-offset: -2px;
+}
+.edge-picker-target.edge-top,
+.edge-picker-target.edge-bottom {
+  width: 56px;
+  height: 20px;
+}
+.edge-picker-target.edge-left,
+.edge-picker-target.edge-right {
+  width: 22px;
+  height: 50px;
+}
+/* Centres: 7 px in from each edge; the bottom one 7 px above the 8 px taskbar; the sides centred above it. */
+.edge-picker-target.edge-top {
+  left: 66px;
+  top: 7px;
+}
+.edge-picker-target.edge-bottom {
+  left: 66px;
+  top: 69px;
+}
+.edge-picker-target.edge-left {
+  left: 7px;
+  top: 38px;
+}
+.edge-picker-target.edge-right {
+  left: 125px;
+  top: 38px;
+}
+
+.edge-picker-bar {
+  display: block;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.3);
+  transition:
+    width var(--spring-switch-duration) var(--spring-switch),
+    height var(--spring-switch-duration) var(--spring-switch),
+    background-color 160ms ease-out,
+    box-shadow 160ms ease-out,
+    transform var(--press-duration) ease-out;
+}
+.edge-top .edge-picker-bar,
+.edge-bottom .edge-picker-bar {
+  width: 18px;
+  height: 4px;
+}
+.edge-left .edge-picker-bar,
+.edge-right .edge-picker-bar {
+  width: 4px;
+  height: 18px;
+}
+.edge-picker-target:hover .edge-picker-bar {
+  background: rgb(255 255 255 / 0.55);
+}
+.edge-picker-target:active .edge-picker-bar {
+  transform: scale(0.92);
+}
+.edge-picker-target.is-selected .edge-picker-bar {
+  background: var(--ember);
+  box-shadow: 0 0 6px rgb(255 149 74 / 0.7);
+}
+.edge-top.is-selected .edge-picker-bar,
+.edge-bottom.is-selected .edge-picker-bar {
+  width: 30px;
+  height: 6px;
+}
+.edge-left.is-selected .edge-picker-bar,
+.edge-right.is-selected .edge-picker-bar {
+  width: 6px;
+  height: 30px;
+}
+
+/* ---------------------------------------------------------------------------------------------------------------- */
+/* Connectors                                                                                                        */
+/* ---------------------------------------------------------------------------------------------------------------- */
+
+.connector-row {
+  height: 52px;
+}
+.connector-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  font-size: 11.5px;
+  line-height: 14px;
+  color: var(--secondary-text);
+}
+.connector-status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ember);
+}
+.connector-progress {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+}
+
+.app-logo {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  overflow: hidden;
+  border-radius: 7px;
+  background: var(--quiet-fill);
+  box-shadow: inset 0 0 0 1px var(--card-hairline);
+  color: var(--secondary-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+}
+/* Logos are drawn for white backgrounds, so they sit on white in dark mode too. */
+.app-logo.has-image {
+  padding: 4px;
+  background: #fff;
+}
+.app-logo-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* ---------------------------------------------------------------------------------------------------------------- */
+/* Memory                                                                                                            */
+/* ---------------------------------------------------------------------------------------------------------------- */
+
+.memory-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.memory-entry .settings-field {
+  flex: 1;
+}
+
+.memory-row {
+  align-items: flex-start;
+  padding-block: 11px;
+}
+.memory-text {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--primary-text);
+  overflow-wrap: anywhere;
+}
+.memory-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+  font-size: 11.5px;
+  line-height: 14px;
+  color: var(--tertiary-text);
+}
+.memory-meta-icon {
+  flex: none;
+}
+.memory-meta-icon.is-learned {
+  color: var(--accent-text);
+}
+.memory-delete-slot {
+  align-self: center;
+}
+
+/* ---------------------------------------------------------------------------------------------------------------- */
+/* Skills                                                                                                            */
+/* ---------------------------------------------------------------------------------------------------------------- */
+
+.skill-row {
+  align-items: flex-start;
+  padding-block: 11px;
+}
+.skill-description {
+  display: -webkit-box;
+  margin-top: 3px;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--secondary-text);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.skill-delete-slot {
+  align-self: center;
+}
+.skills-empty-box {
+  padding: 14px;
+  border: 1px dashed color-mix(in srgb, var(--card-hairline), var(--primary-text) 6%);
+  border-radius: 12px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--secondary-text);
+}
+
+/* ---------------------------------------------------------------------------------------------------------------- */
+/* Activity                                                                                                          */
+/* ---------------------------------------------------------------------------------------------------------------- */
+
+.activity-loading {
+  display: flex;
+  justify-content: center;
+  padding-top: 40px;
+}
+
+.activity-panes {
+  display: flex;
+  flex: 1;
+  align-items: stretch;
+  gap: 14px;
+  min-height: 0;
+}
+
+.activity-task-list {
+  flex: none;
+  /* 230 px on the Mac; a little narrower at the minimum size so the report's three buttons fit beside it, and
+     wider in a bigger window so long titles stop truncating. */
+  width: clamp(200px, 36%, 290px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--card-hairline) transparent;
+}
+.activity-task-list-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+}
+
+.activity-task-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 9px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--hover-duration) ease-out;
+}
+.activity-task-row:hover {
+  background: var(--row-hover);
+}
+.activity-task-row.is-selected {
+  background: var(--selected-row);
+}
+.activity-task-glyph {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 1px;
+}
+.activity-glyph-succeeded {
+  color: var(--secondary-text);
+}
+.activity-glyph-failed {
+  color: var(--alert-deep);
+}
+.activity-glyph-cancelled {
+  color: var(--tertiary-text);
+}
+.activity-task-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.activity-task-title {
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 16px;
+  color: var(--primary-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.activity-task-time {
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--tertiary-text);
+}
+
+.activity-transcript-pane {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+.activity-transcript-header {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  border-bottom: 1px solid var(--card-hairline);
+}
+.activity-transcript-title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--primary-text);
+}
+.activity-transcript-caption {
+  font-size: 11.5px;
+  line-height: 15px;
+  color: var(--tertiary-text);
+  font-variant-numeric: tabular-nums;
+}
+.activity-report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 0 -2px;
+}
+.activity-report-actions-spacer {
+  flex: 1;
+}
+
+.activity-transcript-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--card-hairline) transparent;
+}
+.activity-transcript-body:hover,
+.activity-task-list:hover {
+  scrollbar-color: var(--tertiary-text) transparent;
+}
+.activity-transcript-body:focus-visible {
+  outline-offset: -3px;
+  border-radius: 0 0 11px 11px;
+}
+.activity-report {
+  max-width: 620px;
+  padding: 16px 18px;
+  user-select: text;
+}
+.activity-log {
+  margin: 0;
+  padding: 14px;
+  color: var(--primary-text);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.activity-log.is-loading {
+  color: var(--tertiary-text);
+  font-family: var(--font-text);
+}
+
+/* ---------------------------------------------------------------------------------------------------------------- */
+/* Account                                                                                                           */
+/* ---------------------------------------------------------------------------------------------------------------- */
+
+.account-identity {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+}
+.account-avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, var(--ember-core), var(--ember));
+  color: var(--ember-ink);
+  font-size: 17px;
+  font-weight: 600;
+}
+.account-names {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.account-handle {
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 19px;
+  color: var(--primary-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.account-plan {
+  font-size: 12.5px;
+  line-height: 16px;
+  color: var(--secondary-text);
+}
+.account-card-divider {
+  height: 1px;
+  background: var(--card-hairline);
+}
+
+.usage-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+}
+.usage-meter-figures {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.usage-meter-percent {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.6px;
+  color: var(--primary-text);
+  font-variant-numeric: tabular-nums;
+}
+.usage-meter-caption {
+  font-size: 13px;
+  color: var(--secondary-text);
+}
+.usage-meter-spacer {
+  flex: 1;
+}
+.usage-meter-refill {
+  font-size: 12px;
+  color: var(--tertiary-text);
+  font-variant-numeric: tabular-nums;
+}
+.usage-meter-track {
+  position: relative;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--quiet-fill);
+}
+.usage-meter-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: 999px;
+  background: var(--ember);
+}
+.usage-meter-fill.is-nearly-gone {
+  background: var(--alert);
+}
+
+/* ---------------------------------------------------------------------------------------------------------------- */
+/* Motion, captures and Windows High Contrast                                                                       */
+/* ---------------------------------------------------------------------------------------------------------------- */
+
+.is-still-capture .settings-loading-row {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-loading-row {
+    animation: none;
+  }
+}
+
+/* Forced colours drop backgrounds and shadows, so every surface gets an outline and selection uses the system's
+   Highlight pair, which is the only way it stays visible in High Contrast themes. */
+@media (forced-colors: active) {
+  .settings-sidebar {
+    border-right: 1px solid CanvasText;
+  }
+  .settings-card,
+  .settings-field,
+  .skills-empty-box,
+  .shortcut-choice,
+  .edge-picker-screen {
+    border: 1px solid CanvasText;
+  }
+  .settings-group-divider,
+  .account-card-divider,
+  .settings-list-row + .settings-list-row::before {
+    background: CanvasText;
+  }
+  .activity-transcript-header {
+    border-bottom-color: CanvasText;
+  }
+  .settings-sidebar-row.is-selected,
+  .activity-task-row.is-selected,
+  .shortcut-choice.is-selected {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+  .settings-sidebar-row.is-selected .settings-sidebar-icon {
+    color: HighlightText;
+  }
+  .settings-sidebar-row:hover:not(.is-selected),
+  .activity-task-row:hover:not(.is-selected),
+  .settings-list-row:hover {
+    outline: 1px solid Highlight;
+    outline-offset: -1px;
+  }
+  .reveal-on-row-hover {
+    opacity: 1;
+  }
+  .edge-picker-target .edge-picker-bar {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
+  .edge-picker-target.is-selected .edge-picker-bar {
+    background: Highlight;
+  }
+  .usage-meter-track {
+    border: 1px solid CanvasText;
+  }
+  .usage-meter-fill {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+}

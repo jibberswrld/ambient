@@ -77,8 +77,10 @@ fn ordinary_window(app: &AppHandle, label: &str, title: &str, width: f64, height
     let built = WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
         .title(title)
         .inner_size(width, height)
-        .min_inner_size(width.min(760.0), height.min(520.0))
+        .min_inner_size(width.min(780.0), height.min(560.0))
         .resizable(is_resizable)
+        .maximizable(is_resizable)
+        .minimizable(is_resizable)
         .center()
         .build();
     if let Err(error) = built {
@@ -88,7 +90,7 @@ fn ordinary_window(app: &AppHandle, label: &str, title: &str, width: f64, height
 
 /// The sign-in gate and the permissions step share this window.
 pub fn show_onboarding(app: &AppHandle) {
-    ordinary_window(app, "onboarding", "Ambient", 520.0, 640.0, false);
+    ordinary_window(app, "onboarding", "Ambient", 600.0, 530.0, false);
 }
 
 pub fn close_onboarding(app: &AppHandle) {
@@ -98,7 +100,7 @@ pub fn close_onboarding(app: &AppHandle) {
 }
 
 pub fn show_settings(app: &AppHandle) {
-    ordinary_window(app, "settings", "Ambient Settings", 920.0, 640.0, true);
+    ordinary_window(app, "settings", "Ambient Settings", 820.0, 580.0, true);
 }
 
 pub fn bar_visibility_changed(app: &AppHandle, is_visible: bool) {
