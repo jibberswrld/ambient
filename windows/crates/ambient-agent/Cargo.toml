@@ -10,3 +10,12 @@ async-trait.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
+reqwest.workspace = true
+futures-util.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+base64 = "0.22"
+unicode-segmentation = "1.12"
+
+[dev-dependencies]
+tempfile.workspace = true
