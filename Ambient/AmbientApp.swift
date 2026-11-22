@@ -52,7 +52,7 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
     private var recordingStartTask: Task<Void, Never>?
     private var previousPermissionsWereGranted = false
     private var isUpdatingSettings = false
-    /// Sparkle reads the publik update feed from Info.plist, checks at launch and daily, downloads in the background and asks before relaunching.
+    /// Sparkle reads the publik update feed from Info.plist, checks at every launch and daily, downloads in the background and asks before relaunching.
     private var updaterController: SPUStandardUpdaterController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -60,6 +60,8 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
         guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
         // Started before the runtime so an install that cannot start can still receive the fix.
         updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+        // Sparkle's own schedule only checks once a day, so a relaunch inside that day would find nothing.
+        updaterController?.updater.checkForUpdatesInBackground()
         do {
             let runtime = try AmbientRuntime()
             self.runtime = runtime
