@@ -54,12 +54,19 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
     private var isUpdatingSettings = false
     /// Sparkle reads the publik update feed from Info.plist, checks at every launch and daily, downloads in the background and asks before relaunching.
     private var updaterController: SPUStandardUpdaterController?
+    /// The newer version Sparkle has found. Kept here because it can arrive before the bar and settings exist.
+    private var availableUpdateVersion: String? {
+        didSet {
+            flowBarModel?.availableUpdateVersion = availableUpdateVersion
+            settingsModel?.availableUpdateVersion = availableUpdateVersion
+        }
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Unit tests host the app executable but must not start a second live session.
         guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
         // Started before the runtime so an install that cannot start can still receive the fix.
-        updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+        updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: self, userDriverDelegate: nil)
         // Sparkle's own schedule only checks once a day, so a relaunch inside that day would find nothing.
         updaterController?.updater.checkForUpdatesInBackground()
         do {
@@ -94,6 +101,9 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
             runsCommandsWithoutAsking: runtime.approvalSettings.allowWithoutAsking,
             launchesAtLogin: SMAppService.mainApp.status == .enabled
         ))
+        settingsModel?.appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        settingsModel?.availableUpdateVersion = availableUpdateVersion
+        settingsModel?.onCheckForUpdates = { [weak self] in self?.updaterController?.checkForUpdates(nil) }
         model.onCancelTurn = { [weak self] in self?.cancelTurn() }
         model.onSubmitTypedText = { [weak self] text in
             self?.tourModel?.typedRequestSubmitted()
@@ -101,6 +111,7 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
         }
         model.onOpenSettings = { [weak self] in self?.openSettings() }
         model.onCheckForUpdates = { [weak self] in self?.updaterController?.checkForUpdates(nil) }
+        model.availableUpdateVersion = availableUpdateVersion
         model.onCancelBackgroundTask = { [weak runtime] identifier in
             guard let runtime else { return }
             Task { await runtime.backgroundTaskStore.cancel(taskID: identifier) }
@@ -469,5 +480,15 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
         pointerController.hide()
         drawingController.hide()
         flowBarController?.hide()
+    }
+}
+
+extension AmbientAppDelegate: SPUUpdaterDelegate {
+    func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
+        availableUpdateVersion = item.displayVersionString
+    }
+
+    func updaterDidNotFindUpdate(_ updater: SPUUpdater) {
+        availableUpdateVersion = nil
     }
 }

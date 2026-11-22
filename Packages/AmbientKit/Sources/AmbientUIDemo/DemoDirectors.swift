@@ -265,6 +265,9 @@ enum DemoWindowCaptures {
             for section in AmbientSettingsSection.allCases {
                 let pageModel = AmbientSettingsModel(generalSettings: settingsModel.generalSettings, account: settingsModel.account)
                 pageModel.selectedSection = section
+                pageModel.appVersion = "0.1.8"
+                // The Account page doubles as the capture of an update waiting.
+                if section == .account { pageModel.availableUpdateVersion = "0.1.9" }
                 let view = AmbientSettingsView(model: pageModel, services: makeSettingsServices(.normal))
                 await DemoCaptureRunner.captureWindowContent(view, size: settingsSize, appearance: appearance, settleSeconds: 0.9,
                                                              to: directory.appendingPathComponent("settings-\(section.rawValue)-\(appearanceName).png"))
