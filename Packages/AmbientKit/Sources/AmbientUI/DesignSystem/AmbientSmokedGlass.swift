@@ -74,6 +74,8 @@ struct AmbientSmokedGlassBackground: View {
             // A rim of light along the top edge, fading down: the glass catching light.
             shape.strokeBorder(rimLightGradient, lineWidth: isIncreasedContrast ? 1 : 0.75)
         }
+        // A tight contact shadow draws the edge on a white page, where the soft shadow alone leaves it fuzzy.
+        .shadow(color: .black.opacity(0.28), radius: 1, y: 0.5)
         .shadow(color: .black.opacity(isRaisedCard ? 0.30 : 0.22), radius: isRaisedCard ? 22 : 10, y: isRaisedCard ? 10 : 4)
     }
 
@@ -97,9 +99,11 @@ struct AmbientSmokedGlassBackground: View {
     @ViewBuilder
     private var liveMaterial: some View {
         if #available(macOS 26, *) {
-            // Liquid Glass, tinted toward warm graphite so white text reads over any desktop.
+            // Liquid Glass lightens itself over a bright page, which turned the bar into pale grey with white text
+            // on it. The glass keeps the refraction; the smoke laid over it is what guarantees the darkness.
             Color.clear
-                .glassEffect(.regular.tint(AmbientDesign.Palette.smoke.opacity(smokeDensity)), in: shape)
+                .glassEffect(.regular.tint(AmbientDesign.Palette.smoke.opacity(0.5)), in: shape)
+                .overlay(shape.fill(AmbientDesign.Palette.smoke.opacity(smokeDensity)))
         } else {
             BehindWindowBlurView()
                 .clipShape(shape)
@@ -107,10 +111,10 @@ struct AmbientSmokedGlassBackground: View {
         }
     }
 
-    /// How much smoke is in the glass. Dense enough that the bar reads as one dark object over a white page (thin
-    /// smoke over white turns to flat grey), thin enough that the desktop's colour still shows through. Cards are
-    /// denser than pills because they carry paragraphs.
-    private var smokeDensity: Double { isRaisedCard ? 0.80 : 0.72 }
+    /// How much smoke is in the glass. Dense enough that the bar is near-black over a white page (0.72 over white
+    /// came out mid-grey, and page text showed through behind the bar's own text), with a trace of the desktop's
+    /// colour still coming through. Cards are denser than pills because they carry paragraphs.
+    private var smokeDensity: Double { isRaisedCard ? 0.90 : 0.86 }
 
     /// The rim: brighter on pills so the tiny resting bar is always findable, like a lit edge of glass.
     private var rimLightGradient: LinearGradient {

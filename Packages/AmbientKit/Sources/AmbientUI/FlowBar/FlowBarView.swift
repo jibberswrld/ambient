@@ -50,7 +50,7 @@ struct FlowBarMorphingSurface: View {
         // The menu bar icon can be hidden behind the notch or other icons, so the bar itself also offers Quit.
         .contextMenu {
             Button("Open Settings") { model.openSettings() }
-            Button("Check for Updates…") { model.onCheckForUpdates?() }
+            Button(model.availableUpdateVersion.map { "Update to \($0)…" } ?? "Check for Updates…") { model.onCheckForUpdates?() }
             Divider()
             Button("Quit Ambient") { NSApplication.shared.terminate(nil) }
         }

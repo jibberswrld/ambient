@@ -187,6 +187,8 @@ public final class FlowBarModel {
     public var onSubmitTypedText: ((String) -> Void)?
     public var onOpenSettings: (() -> Void)?
     public var onCheckForUpdates: (() -> Void)?
+    /// The newer version the updater has found, or nil when this is the latest.
+    public var availableUpdateVersion: String?
     public var onCancelBackgroundTask: ((UUID) -> Void)?
     public var onDismissBackgroundTask: ((UUID) -> Void)?
     public var onOpenBackgroundTaskTranscript: ((UUID) -> Void)?

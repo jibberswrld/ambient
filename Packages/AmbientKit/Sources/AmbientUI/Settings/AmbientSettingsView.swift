@@ -28,7 +28,9 @@ public struct AmbientSettingsView: View {
 
     public var body: some View {
         HStack(spacing: 0) {
-            AmbientSettingsSidebar(selectedSection: $model.selectedSection)
+            AmbientSettingsSidebar(selectedSection: $model.selectedSection, appVersion: model.appVersion,
+                                   availableUpdateVersion: model.availableUpdateVersion,
+                                   onCheckForUpdates: { model.onCheckForUpdates?() })
                 .frame(width: 208)
             Rectangle().fill(AmbientDesign.Palette.cardHairline).frame(width: 1)
             page
@@ -60,6 +62,9 @@ public struct AmbientSettingsView: View {
 
 struct AmbientSettingsSidebar: View {
     @Binding var selectedSection: AmbientSettingsSection
+    var appVersion: String?
+    var availableUpdateVersion: String?
+    var onCheckForUpdates: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -69,6 +74,11 @@ struct AmbientSettingsSidebar: View {
                     .font(.system(size: 14, weight: .semibold))
                     .tracking(-0.2)
                     .foregroundStyle(AmbientDesign.Palette.primaryText)
+                if let appVersion {
+                    Text(appVersion)
+                        .font(.system(size: 11).monospacedDigit())
+                        .foregroundStyle(AmbientDesign.Palette.tertiaryText)
+                }
             }
             .padding(.leading, 12)
             .padding(.top, 50)
@@ -80,6 +90,7 @@ struct AmbientSettingsSidebar: View {
                 }
             }
             Spacer()
+            AmbientSidebarUpdateRow(availableUpdateVersion: availableUpdateVersion, action: onCheckForUpdates)
             AmbientSidebarQuitRow()
                 .padding(.bottom, 12)
         }
@@ -119,6 +130,49 @@ private struct AmbientSidebarRow: View {
         .onHover { hovering in isHovering = hovering }
         .ambientPointingHandCursor()
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+/// Updates live at the foot of the sidebar so they are on every page. Normally a quiet "Check for updates";
+/// while a newer version is waiting it becomes the one ember thing in the sidebar.
+private struct AmbientSidebarUpdateRow: View {
+    var availableUpdateVersion: String?
+    var action: () -> Void
+    @State private var isHovering = false
+
+    private var isUpdateWaiting: Bool { availableUpdateVersion != nil }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: isUpdateWaiting ? "arrow.down.circle.fill" : "arrow.triangle.2.circlepath")
+                    .font(.system(size: 12, weight: .medium))
+                    .frame(width: 18)
+                Text(availableUpdateVersion.map { "Update to \($0)" } ?? "Check for updates")
+                    .font(.system(size: 13, weight: isUpdateWaiting ? .semibold : .regular))
+                    .lineLimit(1)
+                    .fixedSize()
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(foregroundColor)
+            .padding(.horizontal, 10)
+            .frame(height: 32)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(backgroundColor))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in isHovering = hovering }
+        .ambientPointingHandCursor()
+    }
+
+    private var foregroundColor: Color {
+        if isUpdateWaiting { return AmbientDesign.Palette.accentText }
+        return isHovering ? AmbientDesign.Palette.primaryText : AmbientDesign.Palette.secondaryText
+    }
+
+    private var backgroundColor: Color {
+        if isUpdateWaiting { return AmbientDesign.Palette.ember.opacity(isHovering ? 0.20 : 0.12) }
+        return isHovering ? AmbientDesign.Palette.rowHover : .clear
     }
 }
 

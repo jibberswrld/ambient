@@ -111,6 +111,12 @@ public final class AmbientSettingsModel {
     public var account: AmbientAccountSummary?
     public var selectedBackgroundTaskID: UUID?
     public var selectedSection: AmbientSettingsSection = .general
+    /// The version of the running app, for the Updates row.
+    public var appVersion: String?
+    /// The newer version the updater has found, or nil when this is the latest.
+    public var availableUpdateVersion: String?
+    /// Asks the updater to check now. When an update is already known, this is what installs it.
+    public var onCheckForUpdates: (() -> Void)?
 
     /// Called after every change on the General page.
     public var onGeneralSettingsChanged: ((AmbientGeneralSettings) -> Void)?
