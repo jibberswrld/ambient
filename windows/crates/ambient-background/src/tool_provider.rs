@@ -91,6 +91,8 @@ impl ToolProvider for BackgroundToolProvider {
     async fn tools(&self) -> Vec<Arc<dyn AmbientTool>> {
         Operation::ALL
             .iter()
+            // AppleScript does not exist on Windows; offering the tool would only waste the model's attention.
+            .filter(|operation| !(cfg!(windows) && matches!(operation, Operation::AppleScript)))
             .map(|operation| {
                 Arc::new(BackgroundTool {
                     operation: *operation,
