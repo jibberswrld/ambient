@@ -1,4 +1,5 @@
 import AmbientContracts
+import AppKit
 import SwiftUI
 
 /// Everything inside the flow bar panel. The panel is larger than the bar; only the glass surface is drawn and
@@ -46,6 +47,12 @@ struct FlowBarMorphingSurface: View {
             model.onSurfaceFrameChanged?(surfaceFrame)
         })
         .gesture(dragToRedock(isEnabled: presentation == .resting || presentation == .hovering))
+        // The menu bar icon can be hidden behind the notch or other icons, so the bar itself also offers Quit.
+        .contextMenu {
+            Button("Open Settings") { model.openSettings() }
+            Divider()
+            Button("Quit Ambient") { NSApplication.shared.terminate(nil) }
+        }
         .animation(AmbientDesign.Motion.surfaceMorph(reduceMotion: reduceMotion), value: presentation)
         .animation(AmbientDesign.Motion.surfaceMorph(reduceMotion: reduceMotion), value: model.dockEdge)
         .animation(AmbientDesign.Motion.surfaceMorph(reduceMotion: reduceMotion), value: model.isShowingToolCallTrail)
