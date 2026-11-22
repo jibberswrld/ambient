@@ -1,0 +1,44 @@
+# Builds the signed Windows installer and attaches it, its signature and the update feed (latest.json) to an
+# existing GitHub release. Run by hand, with the release's tag. publik then offers the installer and serves the feed.
+name: Windows release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The release tag to attach the Windows installer to (for example v0.1.7)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: windows
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install the interface's dependencies
+        working-directory: windows
+        run: pnpm install --frozen-lockfile
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.PUBLIK_UPDATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.PUBLIK_UPDATE_KEY_PASSWORD }}
+        with:
+          projectPath: windows
+          tagName: ${{ inputs.tag }}
+          includeUpdaterJson: true
