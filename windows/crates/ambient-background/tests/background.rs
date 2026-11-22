@@ -517,6 +517,7 @@ async fn approvals_are_exact_and_denial_starts_nothing() {
             json!({"task_id":Uuid::new_v4(),"message":"Do not resume"}),
         ),
         ("run_shell_command", json!({"command":"exit 99"})),
+        #[cfg(not(windows))]
         (
             "run_applescript",
             json!({"source":"error \"should never run\""}),
@@ -535,6 +536,7 @@ async fn approvals_are_exact_and_denial_starts_nothing() {
             "Start agent?",
             "Continue agent?",
             "Run shell command?",
+            #[cfg(not(windows))]
             "Run AppleScript?"
         ]
     );
@@ -565,7 +567,11 @@ async fn schemas_labels_invalid_arguments_and_foreground_bypass() {
         None,
     );
     let tools = provider.tools().await;
-    assert_eq!(tools.len(), 11);
+    assert_eq!(tools.len(), if cfg!(windows) { 10 } else { 11 });
+    #[cfg(windows)]
+    assert!(!tools
+        .iter()
+        .any(|tool| tool.definition().name == "run_applescript"));
     for tool in &tools {
         let definition = tool.definition();
         assert_eq!(definition.parameters_json_schema["type"], "object");
@@ -827,15 +833,24 @@ async fn shell_result_is_bounded_but_transcript_keeps_full_output() {
 async fn cmd_shim_preserves_literal_arguments_without_command_injection() {
     let directory = TempDir::new().unwrap();
     let shim = directory.path().join("fake cli.cmd");
-    let script = directory.path().join("echo.ps1");
-    std::fs::write(&script, "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); [Console]::Write((ConvertTo-Json -InputObject $args -Compress))").unwrap();
-    std::fs::write(&shim, "@echo off\r\npowershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"%~dp0echo.ps1\" %*\r\n").unwrap();
+    let script = directory.path().join("node_modules/fake-cli/echo.js");
+    std::fs::create_dir_all(script.parent().unwrap()).unwrap();
+    std::fs::write(
+        &script,
+        "process.stdout.write(JSON.stringify(process.argv.slice(2)))",
+    )
+    .unwrap();
+    std::fs::write(&shim, "@ECHO off\r\nGOTO start\r\n:find_dp0\r\nSET dp0=%~dp0\r\nEXIT /b\r\n:start\r\nSETLOCAL\r\nCALL :find_dp0\r\nIF EXIST \"%dp0%\\node.exe\" (\r\n  SET \"_prog=%dp0%\\node.exe\"\r\n) ELSE (\r\n  SET \"_prog=node\"\r\n)\r\nendLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & set PATHEXT=%PATHEXT:;.JS;=;% & \"%_prog%\"  \"%dp0%\\node_modules\\fake-cli\\echo.js\" %*\r\n").unwrap();
     let arguments = vec![
         "a space".into(),
         "quotes \"and\" backslash\\".into(),
         "& echo injected > escaped.txt".into(),
         "%PATH% !VAR! ^ (x)".into(),
         "first\nsecond".into(),
+        "first\r\nsecond".into(),
+        "\" & echo injected > escaped.txt & \"".into(),
+        "".into(),
+        "Unicode 🦀".into(),
     ];
     let result = HeadlessProcess::run(
         &shim,
@@ -855,6 +870,148 @@ async fn cmd_shim_preserves_literal_arguments_without_command_injection() {
     );
     let echoed: Vec<String> = serde_json::from_slice(&result.output).unwrap();
     assert_eq!(echoed, arguments);
+    assert!(!directory.path().join("escaped.txt").exists());
+
+    // A local node.exe takes priority over PATH, and the older npm template is also bypassed.
+    let environment = AgentExecutableResolver::environment();
+    let node = which::which_in("node.exe", environment.get("PATH"), directory.path()).unwrap();
+    std::fs::copy(&node, directory.path().join("node.exe")).unwrap();
+    let mut local_environment = environment.clone();
+    local_environment.insert("PATH".into(), String::new());
+    let legacy_shim = directory.path().join("legacy.bat");
+    std::fs::write(&legacy_shim, "@IF EXIST \"%~dp0\\node.exe\" (\r\n  \"%~dp0\\node.exe\" \"%~dp0\\node_modules\\fake-cli\\echo.js\" %*\r\n) ELSE (\r\n  node \"%~dp0\\node_modules\\fake-cli\\echo.js\" %*\r\n)\r\n").unwrap();
+    let result = HeadlessProcess::run(
+        &legacy_shim,
+        &arguments,
+        directory.path(),
+        &local_environment,
+        Duration::from_secs(15),
+        256 * 1024,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        result.exit_code,
+        0,
+        "{}",
+        String::from_utf8_lossy(&result.output)
+    );
+    assert_eq!(
+        serde_json::from_slice::<Vec<String>>(&result.output).unwrap(),
+        arguments
+    );
+
+    // npm also generates shims for native executables without a JavaScript interpreter.
+    let native_shim = directory.path().join("native.cmd");
+    std::fs::copy(
+        &node,
+        directory.path().join("node_modules/fake-cli/native.exe"),
+    )
+    .unwrap();
+    std::fs::write(
+        &native_shim,
+        "@ECHO off\r\n\"%dp0%\\node_modules\\fake-cli\\native.exe\" %*\r\n",
+    )
+    .unwrap();
+    let mut native_arguments = vec![
+        "-e".into(),
+        "process.stdout.write(JSON.stringify(process.argv.slice(1)))".into(),
+        "--".into(),
+    ];
+    native_arguments.extend(arguments.clone());
+    let result = HeadlessProcess::run(
+        &native_shim,
+        &native_arguments,
+        directory.path(),
+        &local_environment,
+        Duration::from_secs(15),
+        256 * 1024,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        result.exit_code,
+        0,
+        "{}",
+        String::from_utf8_lossy(&result.output)
+    );
+    assert_eq!(
+        serde_json::from_slice::<Vec<String>>(&result.output).unwrap(),
+        arguments
+    );
+    assert!(!directory.path().join("escaped.txt").exists());
+}
+#[cfg(windows)]
+#[tokio::test]
+async fn unrecognized_batch_shim_rejects_multiline_arguments_before_launch() {
+    let directory = TempDir::new().unwrap();
+    let shim = directory.path().join("unknown.cmd");
+    std::fs::write(&shim, "@echo launched > launched.txt\r\n").unwrap();
+    for argument in ["first\nsecond", "first\rsecond", "first\r\nsecond"] {
+        let error = HeadlessProcess::run(
+            &shim,
+            &[argument.into()],
+            directory.path(),
+            &AgentExecutableResolver::environment(),
+            Duration::from_secs(5),
+            1024,
+        )
+        .await
+        .unwrap_err();
+        assert!(error.contains("newline or carriage return"), "{error}");
+        assert!(!directory.path().join("launched.txt").exists());
+    }
+}
+#[cfg(windows)]
+#[tokio::test]
+async fn unrecognized_batch_shim_preserves_literal_single_line_arguments() {
+    let directory = TempDir::new().unwrap();
+    let shim = directory.path().join("unknown.cmd");
+    let script = directory.path().join("echo.js");
+    std::fs::write(
+        &script,
+        "process.stdout.write(JSON.stringify(process.argv.slice(2)))",
+    )
+    .unwrap();
+    let environment = AgentExecutableResolver::environment();
+    let node = which::which_in("node.exe", environment.get("PATH"), directory.path()).unwrap();
+    std::fs::write(
+        &shim,
+        format!(
+            "@echo off\r\n\"{}\" \"{}\" %*\r\n",
+            node.display(),
+            script.display()
+        ),
+    )
+    .unwrap();
+    let arguments = vec![
+        "a space".into(),
+        "quotes \"and\" backslash\\".into(),
+        "%PATH% !VAR! ^ (x)".into(),
+        "& echo injected > escaped.txt".into(),
+        "\" & echo injected > escaped.txt & \"".into(),
+        "".into(),
+    ];
+    let result = HeadlessProcess::run(
+        &shim,
+        &arguments,
+        directory.path(),
+        &environment,
+        Duration::from_secs(15),
+        256 * 1024,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        result.exit_code,
+        0,
+        "{}",
+        String::from_utf8_lossy(&result.output)
+    );
+    assert_eq!(
+        serde_json::from_slice::<Vec<String>>(&result.output).unwrap(),
+        arguments
+    );
     assert!(!directory.path().join("escaped.txt").exists());
 }
 #[tokio::test]

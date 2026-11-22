@@ -152,6 +152,29 @@ fn quote_argument(argument: &str) -> String {
     quoted
 }
 
+fn quote_batch_argument(argument: &str) -> String {
+    let mut quoted = String::from("\"");
+    let mut backslashes = 0;
+    for character in argument.chars() {
+        if character == '\\' {
+            backslashes += 1;
+            continue;
+        }
+        if character == '"' {
+            quoted.push_str(&"\\".repeat(backslashes * 2));
+            // cmd uses doubled quotes, rather than a backslash, to keep shell syntax quoted.
+            quoted.push_str("\"\"");
+        } else {
+            quoted.push_str(&"\\".repeat(backslashes));
+            quoted.push(character);
+        }
+        backslashes = 0;
+    }
+    quoted.push_str(&"\\".repeat(backslashes * 2));
+    quoted.push('"');
+    quoted
+}
+
 pub(super) fn spawn(
     executable: &Path,
     arguments: &[String],
@@ -168,45 +191,77 @@ pub(super) fn spawn(
     ),
     String,
 > {
-    let executable = which::which_in(executable, environment.get("PATH"), directory)
+    let mut executable = which::which_in(executable, environment.get("PATH"), directory)
         .map_err(|error| error.to_string())?;
+    let mut arguments = arguments.to_vec();
+    if executable.extension().is_some_and(|extension| {
+        extension.eq_ignore_ascii_case("cmd") || extension.eq_ignore_ascii_case("bat")
+    }) {
+        let shim = std::fs::read_to_string(&executable).map_err(|error| error.to_string())?;
+        if let Some(entry) = super::npm_shim_entry(&shim) {
+            let shim_directory = executable.parent().ok_or("Missing shim directory.")?;
+            let entry = shim_directory.join(entry);
+            if entry
+                .extension()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("exe"))
+            {
+                executable = entry;
+            } else {
+                let local_node = shim_directory.join("node.exe");
+                executable = if local_node.is_file() {
+                    local_node
+                } else {
+                    which::which_in("node.exe", environment.get("PATH"), directory)
+                        .map_err(|error| format!("Could not find node.exe for npm shim: {error}"))?
+                };
+                arguments.insert(0, entry.to_string_lossy().into_owned());
+            }
+        }
+    }
     let extension = executable
         .extension()
         .and_then(|extension| extension.to_str())
         .unwrap_or("");
     let mut environment = environment.clone();
-    let (application, command_line) =
-        if extension.eq_ignore_ascii_case("cmd") || extension.eq_ignore_ascii_case("bat") {
-            // npm shims forward %* to a native executable. A naked batch invocation skips delayed
-            // expansion; its final native command expands these placeholders AFTER cmd parses shell
-            // syntax. Prompt quotes, %, !, &, and multiline text therefore never become cmd syntax.
-            let namespace = format!("AMBIENT_SHIM_{}", uuid::Uuid::new_v4().simple());
-            environment.insert(namespace.clone(), executable.to_string_lossy().into_owned());
-            let placeholders = arguments
-                .iter()
-                .enumerate()
-                .map(|(index, argument)| {
-                    let key = format!("{namespace}_{index}");
-                    environment.insert(key.clone(), quote_argument(argument));
-                    format!("!{key}!")
-                })
-                .collect::<Vec<_>>()
-                .join(" ");
-            let application = std::env::var_os("COMSPEC")
-                .map(std::path::PathBuf::from)
-                .unwrap_or_else(|| "C:\\Windows\\System32\\cmd.exe".into());
-            let line = format!(
-                "{} /d /s /v:on /c \"\"%{namespace}%\" {placeholders}\"",
-                quote_argument(&application.to_string_lossy())
-            );
-            (application, line)
-        } else {
-            let line = std::iter::once(quote_argument(&executable.to_string_lossy()))
-                .chain(arguments.iter().map(|argument| quote_argument(argument)))
-                .collect::<Vec<_>>()
-                .join(" ");
-            (executable, line)
-        };
+    let (application, command_line) = if extension.eq_ignore_ascii_case("cmd")
+        || extension.eq_ignore_ascii_case("bat")
+    {
+        // Unknown batch wrappers cannot carry multiline arguments. Never silently truncate a prompt.
+        if arguments
+            .iter()
+            .any(|argument| argument.contains(['\r', '\n']))
+        {
+            return Err("Cannot pass newline or carriage return arguments to an unrecognized .cmd/.bat shim.".into());
+        }
+        // Expansion is single-pass; values containing % are not recursively expanded. Delayed
+        // expansion must stay off so literal ! and ^ survive the wrapper's %* forwarding.
+        let namespace = format!("AMBIENT_SHIM_{}", uuid::Uuid::new_v4().simple());
+        environment.insert(namespace.clone(), executable.to_string_lossy().into_owned());
+        let placeholders = arguments
+            .iter()
+            .enumerate()
+            .map(|(index, argument)| {
+                let key = format!("{namespace}_{index}");
+                environment.insert(key.clone(), quote_batch_argument(argument));
+                format!("%{key}%")
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+        let application = std::env::var_os("COMSPEC")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| "C:\\Windows\\System32\\cmd.exe".into());
+        let line = format!(
+            "{} /d /s /v:off /c \"\"%{namespace}%\" {placeholders}\"",
+            quote_argument(&application.to_string_lossy())
+        );
+        (application, line)
+    } else {
+        let line = std::iter::once(quote_argument(&executable.to_string_lossy()))
+            .chain(arguments.iter().map(|argument| quote_argument(argument)))
+            .collect::<Vec<_>>()
+            .join(" ");
+        (executable, line)
+    };
     let application = wide(application);
     let mut command_line = wide(command_line);
     let directory = wide(directory);

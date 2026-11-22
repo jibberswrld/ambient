@@ -10,6 +10,52 @@ use tokio::sync::mpsc;
 #[path = "windows_process.rs"]
 mod platform;
 
+// Parse only npm's quoted, shim-relative entry point followed by literal argument forwarding.
+// Keeping this independent of filesystem/Windows APIs lets every platform test real shim samples.
+#[cfg(any(windows, test))]
+fn npm_shim_entry(shim: &str) -> Option<String> {
+    for line in shim.lines() {
+        let Some(invocation) = line.trim().strip_suffix("%*") else {
+            continue;
+        };
+        let Some(before_closing_quote) = invocation.trim_end().strip_suffix('"') else {
+            continue;
+        };
+        let Some((launcher, entry)) = before_closing_quote.rsplit_once('"') else {
+            continue;
+        };
+        let lowercase_entry = entry.to_ascii_lowercase();
+        let prefix_length = if lowercase_entry.starts_with("%dp0%") {
+            5
+        } else if lowercase_entry.starts_with("%~dp0") {
+            5
+        } else {
+            continue;
+        };
+        let relative = entry[prefix_length..].trim_start_matches(['\\', '/']);
+        if relative.is_empty() || relative.contains(['%', '\0', ':']) {
+            continue;
+        }
+        let launcher = launcher.trim_end().to_ascii_lowercase();
+        let is_executable = lowercase_entry.ends_with(".exe");
+        let is_javascript = [".js", ".cjs", ".mjs"]
+            .iter()
+            .any(|extension| lowercase_entry.ends_with(extension));
+        let node_launcher = launcher.ends_with("\"%_prog%\"")
+            || launcher.ends_with("\"%~dp0\\node.exe\"")
+            || launcher.ends_with("\"%~dp0node.exe\"")
+            || launcher.ends_with("\"%dp0%\\node.exe\"")
+            || launcher.trim_start_matches('@').trim() == "node"
+            || launcher.trim_start_matches('@').trim() == "node.exe";
+        if (is_javascript && node_launcher)
+            || (is_executable && (node_launcher || launcher.trim_start_matches('@').is_empty()))
+        {
+            return Some(relative.into());
+        }
+    }
+    None
+}
+
 #[derive(Debug, Clone)]
 pub struct HeadlessProcessResult {
     pub exit_code: i32,
@@ -408,5 +454,77 @@ pub(crate) fn shell_command(command: &str) -> (PathBuf, Vec<String>) {
             }),
             vec!["-c".into(), command.into()],
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::npm_shim_entry;
+
+    #[test]
+    fn parses_modern_npm_cmd_shim() {
+        let shim = r#"@ECHO off
+GOTO start
+:find_dp0
+SET dp0=%~dp0
+EXIT /b
+:start
+SETLOCAL
+CALL :find_dp0
+IF EXIST "%dp0%\node.exe" (
+  SET "_prog=%dp0%\node.exe"
+) ELSE (
+  SET "_prog=node"
+)
+endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & set PATHEXT=%PATHEXT:;.JS;=;% & "%_prog%"  "%dp0%\node_modules\@openai\codex\bin\codex.js" %*
+"#;
+        assert_eq!(
+            npm_shim_entry(&shim.replace('\n', "\r\n")).as_deref(),
+            Some(r"node_modules\@openai\codex\bin\codex.js")
+        );
+    }
+
+    #[test]
+    fn parses_older_npm_cmd_shim() {
+        let shim = r#"@IF EXIST "%~dp0\node.exe" (
+  "%~dp0\node.exe" "%~dp0\node_modules\@anthropic-ai\claude-code\cli.js" %*
+) ELSE (
+  @SETLOCAL
+  @SET PATHEXT=%PATHEXT:;.JS;=;%
+  node "%~dp0\node_modules\@anthropic-ai\claude-code\cli.js" %*
+)
+"#;
+        assert_eq!(
+            npm_shim_entry(shim).as_deref(),
+            Some(r"node_modules\@anthropic-ai\claude-code\cli.js")
+        );
+        assert_eq!(
+            npm_shim_entry(r#"node "%~dp0node_modules\cli.cjs" %*"#).as_deref(),
+            Some(r"node_modules\cli.cjs")
+        );
+    }
+
+    #[test]
+    fn parses_native_npm_cmd_shim() {
+        for prefix in ["%dp0%\\", "%~dp0"] {
+            let shim = format!("@ECHO off\r\n\"{prefix}node_modules\\cli\\bin.exe\" %*\r\n");
+            assert_eq!(
+                npm_shim_entry(&shim).as_deref(),
+                Some(r"node_modules\cli\bin.exe")
+            );
+        }
+    }
+
+    #[test]
+    fn unrecognized_shims_do_not_guess_an_entry_point() {
+        for shim in [
+            "@echo off\r\necho %*",
+            r#"powershell.exe "%~dp0echo.ps1" %*"#,
+            r#"node --custom-flag "%~dp0cli.js" %*"#,
+            r#"node "%~dp0%OTHER%\cli.js" %*"#,
+            r#"node "%~dp0cli.js" %* & echo something-else"#,
+        ] {
+            assert_eq!(npm_shim_entry(shim), None, "{shim}");
+        }
     }
 }
