@@ -1,0 +1,22 @@
+# Ambient for Windows. One crate per subsystem, mirroring Packages/AmbientKit on the Mac:
+# every subsystem crate depends only on ambient-contracts, never on a sibling.
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.7"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+ambient-contracts = { path = "crates/ambient-contracts" }
+async-trait = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "process", "io-util", "fs"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream", "multipart"] }
+futures-util = "0.3"
+tempfile = "3"
