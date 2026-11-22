@@ -6,7 +6,14 @@ license.workspace = true
 
 [dependencies]
 ambient-contracts.workspace = true
-async-trait.workspace = true
 serde.workspace = true
+cpal = "=0.15.3"
+rodio = { version = "=0.20.1", default-features = false, features = ["wav", "mp3"] }
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
+xcap = "=0.9.10"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse", "Win32_System_Threading", "Win32_System_LibraryLoader"] }
+
+[dev-dependencies]
 serde_json.workspace = true
-tokio.workspace = true
