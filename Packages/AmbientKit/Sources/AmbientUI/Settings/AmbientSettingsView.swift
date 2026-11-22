@@ -337,6 +337,8 @@ struct AmbientGeneralSettingsPage: View {
                 }
                 AmbientGroupDivider()
                 AmbientSwitchRow(title: "Read replies out loud", detail: nil, isOn: $model.generalSettings.speaksReplies)
+                AmbientGroupDivider()
+                AmbientSwitchRow(title: "Sound effects", detail: "Very quiet, brief cues. Background agents stay silent.", isOn: $model.generalSettings.soundEffectsEnabled)
             }
             AmbientSettingsGroup(label: "The bar") {
                 AmbientSettingsRow(title: "Screen edge", detail: "You can also drag the bar to any edge.") {

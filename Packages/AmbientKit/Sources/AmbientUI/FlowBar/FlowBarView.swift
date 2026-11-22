@@ -49,6 +49,7 @@ struct FlowBarMorphingSurface: View {
         .gesture(dragToRedock(isEnabled: presentation == .resting || presentation == .hovering))
         // The menu bar icon can be hidden behind the notch or other icons, so the bar itself also offers Quit.
         .contextMenu {
+            Button("Open Dashboard") { model.onOpenDashboard?() }
             Button("Open Settings") { model.openSettings() }
             Button(model.availableUpdateVersion.map { "Update to \($0)…" } ?? "Check for Updates…") { model.onCheckForUpdates?() }
             Divider()
@@ -204,6 +205,7 @@ struct FlowBarHoverContent: View {
                     .help("Hold \(model.pushToTalkShortcut.spokenName), then talk")
                     if !model.backgroundTasks.isEmpty { FlowBarTasksChip(model: model, isUpright: true) }
                     divider
+                    AmbientGlassIconButton(systemImageName: "rectangle.inset.filled", accessibilityLabelText: "Open Dashboard") { model.onOpenDashboard?() }
                     AmbientGlassIconButton(systemImageName: "keyboard", accessibilityLabelText: "Type instead") { model.beginTyping() }
                     AmbientGlassIconButton(systemImageName: "gearshape", accessibilityLabelText: "Settings") { model.openSettings() }
                 }
@@ -226,6 +228,7 @@ struct FlowBarHoverContent: View {
                     }
                     divider
                     HStack(spacing: 0) {
+                        AmbientGlassIconButton(systemImageName: "rectangle.inset.filled", accessibilityLabelText: "Open Dashboard") { model.onOpenDashboard?() }
                         AmbientGlassIconButton(systemImageName: "keyboard", accessibilityLabelText: "Type instead") { model.beginTyping() }
                         AmbientGlassIconButton(systemImageName: "gearshape", accessibilityLabelText: "Settings") { model.openSettings() }
                     }

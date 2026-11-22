@@ -186,6 +186,18 @@ public final class FlowBarModel {
     public var onCancelTurn: (() -> Void)?
     public var onSubmitTypedText: ((String) -> Void)?
     public var onOpenSettings: (() -> Void)?
+    public var onOpenDashboard: (() -> Void)?
+    public var onStartListening: (() -> Void)?
+    public var onFinishListening: (() -> Void)?
+    public var onOpenDashboardSection: ((AmbientSettingsSection) -> Void)?
+    public var lastRequestText = ""
+    public var isDashboardVisible = false {
+        didSet {
+            if isDashboardVisible { cancelLinger() }
+            else if case .replyFinished = turnPhase { scheduleLinger(after: finishedReplyLingerDuration) }
+            else if case .error = turnPhase { scheduleLinger(after: errorLingerDuration) }
+        }
+    }
     public var onCheckForUpdates: (() -> Void)?
     /// The newer version the updater has found, or nil when this is the latest.
     public var availableUpdateVersion: String?
@@ -487,6 +499,7 @@ public final class FlowBarModel {
     private func resetTurn() {
         replyRevealTask?.cancel()
         replyRevealTask = nil
+        lastRequestText = ""
         replyText = ""
         displayedReplyText = ""
         toolCallsThisTurn = []
@@ -502,7 +515,7 @@ public final class FlowBarModel {
 
     private func scheduleLinger(after duration: TimeInterval) {
         cancelLinger()
-        guard duration > 0, !isPointerHovering else { return }
+        guard duration > 0, !isPointerHovering, !isDashboardVisible else { return }
         lingerTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
             guard !Task.isCancelled, let self else { return }

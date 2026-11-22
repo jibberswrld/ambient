@@ -31,14 +31,16 @@ public enum AmbientPushToTalkShortcut: String, Codable, CaseIterable, Sendable {
 public struct AmbientGeneralSettings: Equatable, Sendable {
     public var pushToTalkShortcut: AmbientPushToTalkShortcut
     public var dockEdge: FlowBarDockEdge
+    public var soundEffectsEnabled: Bool
     public var speaksReplies: Bool
     public var runsCommandsWithoutAsking: Bool
     public var launchesAtLogin: Bool
 
-    public init(pushToTalkShortcut: AmbientPushToTalkShortcut = .controlOption, dockEdge: FlowBarDockEdge = .bottom, speaksReplies: Bool = true, runsCommandsWithoutAsking: Bool = false, launchesAtLogin: Bool = false) {
+    public init(pushToTalkShortcut: AmbientPushToTalkShortcut = .controlOption, dockEdge: FlowBarDockEdge = .bottom, speaksReplies: Bool = true, soundEffectsEnabled: Bool = true, runsCommandsWithoutAsking: Bool = false, launchesAtLogin: Bool = false) {
         self.pushToTalkShortcut = pushToTalkShortcut
         self.dockEdge = dockEdge
         self.speaksReplies = speaksReplies
+        self.soundEffectsEnabled = soundEffectsEnabled
         self.runsCommandsWithoutAsking = runsCommandsWithoutAsking
         self.launchesAtLogin = launchesAtLogin
     }

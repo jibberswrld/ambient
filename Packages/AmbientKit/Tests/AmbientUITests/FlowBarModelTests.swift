@@ -10,6 +10,32 @@ final class FlowBarModelTests: XCTestCase {
         return model
     }
 
+    func testDashboardKeepsTheReplyUntilItCloses() async throws {
+        let model = makeModel()
+        model.finishedReplyLingerDuration = 0.02
+        model.apply(.finished(finalText: "An answer from the bar."))
+        model.isDashboardVisible = true
+        try await Task.sleep(for: .milliseconds(80))
+        XCTAssertEqual(model.displayedReplyText, "An answer from the bar.")
+        XCTAssertEqual(model.turnPhase, .replyFinished)
+        model.isDashboardVisible = false
+        try await Task.sleep(for: .milliseconds(80))
+        XCTAssertEqual(model.turnPhase, .idle)
+    }
+
+    func testDashboardKeepsAnErrorAndResumesItsDismissalWhenClosed() async throws {
+        let model = makeModel()
+        model.errorLingerDuration = 0.02
+        model.isDashboardVisible = true
+        let notice = FlowBarErrorNotice(message: "Please try again.")
+        model.showError(notice)
+        try await Task.sleep(for: .milliseconds(80))
+        XCTAssertEqual(model.turnPhase, .error(notice))
+        model.isDashboardVisible = false
+        try await Task.sleep(for: .milliseconds(80))
+        XCTAssertEqual(model.turnPhase, .idle)
+    }
+
     func testRestsByDefaultAndHoversWithThePointer() {
         let model = makeModel()
         XCTAssertEqual(model.presentation, .resting)

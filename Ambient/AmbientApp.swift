@@ -15,6 +15,10 @@ struct AmbientApp: App {
     var body: some Scene {
         Settings { EmptyView() }
             .commands {
+                CommandGroup(after: .newItem) {
+                    Button("Open Dashboard") { appDelegate.openDashboard() }
+                        .keyboardShortcut("d", modifiers: [.command, .shift])
+                }
                 CommandGroup(replacing: .appSettings) {
                     Button("Open Settings") { appDelegate.openSettings() }
                         .keyboardShortcut(",", modifiers: .command)
@@ -28,6 +32,8 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
     private var runtime: AmbientRuntime?
     private var flowBarModel: FlowBarModel?
     private var flowBarController: FlowBarPanelController?
+    private var dashboardController: AmbientDashboardWindowController?
+    private let soundEffects = AmbientSoundEffects()
     private var settingsModel: AmbientSettingsModel?
     private var settingsController: AmbientSettingsWindowController?
     private var statusItem: NSStatusItem?
@@ -98,6 +104,7 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
             pushToTalkShortcut: AmbientPushToTalkShortcut(rawValue: UserDefaults.standard.string(forKey: "ambient.pushToTalkShortcut") ?? "") ?? .controlOption,
             dockEdge: controller.placement.edge,
             speaksReplies: runtime.spokenRepliesEnabled,
+            soundEffectsEnabled: UserDefaults.standard.object(forKey: "ambient.soundEffectsEnabled") as? Bool ?? true,
             runsCommandsWithoutAsking: runtime.approvalSettings.allowWithoutAsking,
             launchesAtLogin: SMAppService.mainApp.status == .enabled
         ))
@@ -109,6 +116,11 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
             self?.tourModel?.typedRequestSubmitted()
             self?.submit(text: text)
         }
+        soundEffects.isEnabled = settingsModel?.generalSettings.soundEffectsEnabled ?? true
+        model.onOpenDashboard = { [weak self] in self?.openDashboard() }
+        model.onOpenDashboardSection = { [weak self] section in self?.openSettings(section: section) }
+        model.onStartListening = { [weak self] in self?.handleShortcut(.pressed) }
+        model.onFinishListening = { [weak self] in self?.handleShortcut(.released) }
         model.onOpenSettings = { [weak self] in self?.openSettings() }
         model.onCheckForUpdates = { [weak self] in self?.updaterController?.checkForUpdates(nil) }
         model.availableUpdateVersion = availableUpdateVersion
@@ -134,6 +146,14 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
         model.onOpenURL = { NSWorkspace.shared.open($0) }
         runtime.onAgentEvent = { [weak self, weak model] event in
             model?.apply(event)
+            switch event {
+            case .finished:
+                if NSApp.isActive || model?.isPointerHovering == true { self?.soundEffects.play(.complete) }
+            case .failed(let failure):
+                if case .cancelled = failure {}
+                else if NSApp.isActive || model?.isPointerHovering == true { self?.soundEffects.play(.error) }
+            default: break
+            }
             self?.tourModel?.apply(event)
         }
         runtime.interaction.approvalHandler = { [weak self, weak model] title, detail in
@@ -141,6 +161,7 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
             self.showBar()
             let kind: FlowBarApprovalRequest.Kind = title == "Run shell command?" ? .shellCommand
                 : (["Start Codex agent?", "Start Claude agent?", "Start agent?", "Continue agent?"].contains(title) ? .backgroundAgent : .other)
+            if NSApp.isActive || model.isPointerHovering { self.soundEffects.play(.attention) }
             NSLog("Ambient approval presented: %@", title)
             self.tourModel?.approvalRequested(kind: kind)
             let allowed = await model.requestApproval(FlowBarApprovalRequest(title: title, detail: detail, kind: kind))
@@ -153,6 +174,7 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
             guard let self, let model else { return }
             // Transcribing straight to idle is a recording in which nothing was heard: an empty transcript.
             if case .transcribing = self.previousRuntimePhase, case .idle = phase { self.tourModel?.heardNothing() }
+            let previousPhase = self.previousRuntimePhase
             self.previousRuntimePhase = phase
             switch phase {
             case .idle: model.returnToIdle()
@@ -161,7 +183,14 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
                 model.updateAudioLevel(Double(level))
                 self.showBar()
             case .transcribing: model.beginTranscribing(); self.showBar()
-            case .thinking: model.beginThinking(); self.tourModel?.thinkingStarted(); self.showBar()
+            case .thinking:
+                model.lastRequestText = runtime.state.userText
+                model.beginThinking()
+                switch previousPhase {
+                case .idle, .transcribing: self.soundEffects.play(.send)
+                default: break
+                }
+                self.tourModel?.thinkingStarted(); self.showBar()
             // These arrive verbatim through onAgentEvent, not reconstructed from accumulated state.
             case .working, .responding, .finished, .failed: break
             }
@@ -208,6 +237,9 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
         item.button?.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Ambient")
         item.button?.image?.isTemplate = true
         let menu = NSMenu()
+        let dashboard = menu.addItem(withTitle: "Open Dashboard", action: #selector(openDashboardFromMenu), keyEquivalent: "d")
+        dashboard.keyEquivalentModifierMask = [.command, .shift]
+        dashboard.target = self
         let settings = menu.addItem(withTitle: "Open Settings", action: #selector(openSettingsFromMenu), keyEquivalent: ",")
         settings.target = self
         let visibility = menu.addItem(withTitle: "Show Bar", action: #selector(toggleBar), keyEquivalent: "")
@@ -238,6 +270,17 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
             controller.hide()
             visibilityMenuItem?.title = "Show Bar"
         } else { showBar() }
+    }
+
+    @objc private func openDashboardFromMenu() { openDashboard() }
+
+    func openDashboard() {
+        guard let model = flowBarModel else { return }
+        if dashboardController == nil {
+            dashboardController = AmbientDashboardWindowController(model: model, onReturnToBar: { [weak self] in self?.showBar() })
+        }
+        dashboardController?.show()
+        if model.turnPhase != .listening { soundEffects.play(.open) }
     }
 
     @objc private func openSettingsFromMenu() { openSettings() }
@@ -285,6 +328,8 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
     private func applySettings(_ settings: AmbientGeneralSettings) {
         guard !isUpdatingSettings, let runtime else { return }
         runtime.spokenRepliesEnabled = settings.speaksReplies
+        soundEffects.isEnabled = settings.soundEffectsEnabled
+        UserDefaults.standard.set(settings.soundEffectsEnabled, forKey: "ambient.soundEffectsEnabled")
         runtime.approvalSettings.allowWithoutAsking = settings.runsCommandsWithoutAsking
         UserDefaults.standard.set(settings.pushToTalkShortcut.rawValue, forKey: "ambient.pushToTalkShortcut")
         shortcutMonitor.shortcut = settings.pushToTalkShortcut
@@ -457,6 +502,7 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
 
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls {
+            if url.scheme?.lowercased() == "ambient", url.host == "dashboard" { openDashboard(); continue }
             if let text = Self.automationText(from: url) { submit(text: text); continue }
         }
     }

@@ -9,7 +9,8 @@ It is a native macOS app (Swift, SwiftUI and AppKit), forked from [Clicky](https
 ## What it does
 
 - **Talk to it.** Hold Control+Option, speak, release. Speech is recognised on your Mac when possible, and replies are spoken as they are written.
-- **A bar, not a window.** The bar docks to any of the four screen edges. Drag it where you want it.
+- **A bar and a dashboard.** Keep the small bar docked to any screen edge, or open the voice-first dashboard with its dashboard button or Shift–Command–D. Both share the same conversation, tools and approvals.
+- **Quiet sound feedback.** Short cues mark requests, approvals and finished work. Turn them off in Settings → General.
 - **Shows you on your screen.** Ask where something is or how to do something and Ambient looks at your screen, then points or draws on it: arrows, circles, boxes, captions, even sketches. Drawings stay until you remove them.
 - **Connected apps (source builds only for now).** Gmail, Calendar, Slack, GitHub, Notion and hundreds more through Composio, signed in from your browser with no API keys. The downloadable build does not include this yet: it needs the connector service, which is not hosted. See `connector/` to run it yourself.
 - **Background agents.** Ask it to start an agent for research or a coding task. The agent runs headless on your publik account while you keep working, and reports back in the bar. If you have Codex or Claude Code installed, you can ask for those by name.
