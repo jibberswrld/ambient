@@ -80,6 +80,8 @@ struct AmbientSettingsSidebar: View {
                 }
             }
             Spacer()
+            AmbientSidebarQuitRow()
+                .padding(.bottom, 12)
         }
         .padding(.horizontal, 10)
         .frame(maxHeight: .infinity, alignment: .top)
@@ -117,6 +119,32 @@ private struct AmbientSidebarRow: View {
         .onHover { hovering in isHovering = hovering }
         .ambientPointingHandCursor()
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+/// Quit sits at the foot of the sidebar on every page: the menu bar icon is easy to lose behind the notch.
+private struct AmbientSidebarQuitRow: View {
+    @State private var isHovering = false
+
+    var body: some View {
+        Button { NSApplication.shared.terminate(nil) } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "power")
+                    .font(.system(size: 12, weight: .medium))
+                    .frame(width: 18)
+                Text("Quit Ambient")
+                    .font(.system(size: 13))
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(isHovering ? AmbientDesign.Palette.primaryText : AmbientDesign.Palette.secondaryText)
+            .padding(.horizontal, 10)
+            .frame(height: 32)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(isHovering ? AmbientDesign.Palette.rowHover : .clear))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in isHovering = hovering }
+        .ambientPointingHandCursor()
     }
 }
 
