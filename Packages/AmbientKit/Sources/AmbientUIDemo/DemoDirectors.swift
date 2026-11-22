@@ -270,6 +270,13 @@ enum DemoWindowCaptures {
                                                              to: directory.appendingPathComponent("settings-\(section.rawValue)-\(appearanceName).png"))
             }
         }
+        for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+            let reportModel = AmbientSettingsModel(generalSettings: settingsModel.generalSettings, account: settingsModel.account)
+            reportModel.selectedSection = .activity
+            reportModel.selectedBackgroundTaskID = DemoSampleData.inboxTaskIdentifier
+            await DemoCaptureRunner.captureWindowContent(AmbientSettingsView(model: reportModel, services: makeSettingsServices(.normal)), size: settingsSize, appearance: appearance, settleSeconds: 0.9,
+                                                         to: directory.appendingPathComponent("settings-activity-report-\(appearance == .aqua ? "light" : "dark").png"))
+        }
         for (behaviour, name) in [(DemoConnectorService.Behaviour.failing, "error"), (.empty, "empty")] {
             let pageModel = AmbientSettingsModel(generalSettings: settingsModel.generalSettings, account: settingsModel.account)
             pageModel.selectedSection = .connectors

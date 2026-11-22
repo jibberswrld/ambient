@@ -27,6 +27,13 @@ extension AmbientBackgroundTask.Kind {
     }
 }
 
+extension AmbientBackgroundTask {
+    /// An agent that finished with an answer has a report worth reading in full; a command only has output.
+    var hasReport: Bool {
+        status == .succeeded && kind != .shellCommand && !(result ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
 // MARK: - Tray
 
 /// The background task tray: one row per task with what it is doing now, and results for finished ones.
@@ -121,7 +128,7 @@ struct FlowBarTaskRow: View {
                     .truncationMode(.middle)
                 if backgroundTask.status != .running {
                     HStack(spacing: 4) {
-                        AmbientCapsuleButton(title: "Transcript", systemImageName: "text.alignleft", prominence: .secondary, isCompact: true) {
+                        AmbientCapsuleButton(title: backgroundTask.hasReport ? "Read report" : "Transcript", systemImageName: backgroundTask.hasReport ? "doc.text" : "text.alignleft", prominence: .secondary, isCompact: true) {
                             model.openBackgroundTaskTranscript(backgroundTask.id)
                         }
                         AmbientCapsuleButton(title: "Dismiss", prominence: .quiet, isCompact: true) {
@@ -178,10 +185,18 @@ struct FlowBarTaskRow: View {
         }
     }
 
-    /// Agents answer in markdown. The row has room for a few plain lines, so links and emphasis
-    /// are reduced to their words instead of showing raw brackets and asterisks.
+    /// Agents answer in markdown. The row has room for a few plain lines, so headings are skipped and
+    /// links, emphasis and list markers are reduced to their words instead of showing raw symbols.
     private static func plainText(fromMarkdown markdownText: String) -> String {
-        String(AmbientLightMarkdownParser.inlineAttributedText(markdownText).characters)
+        let blockTexts: [String] = AmbientLightMarkdownParser.blocks(from: markdownText).compactMap { block in
+            switch block {
+            case .heading: return nil
+            case .paragraph(let text), .listItem(_, let text), .codeBlock(let text):
+                return String(AmbientLightMarkdownParser.inlineAttributedText(text).characters)
+            }
+        }
+        if blockTexts.isEmpty { return String(AmbientLightMarkdownParser.inlineAttributedText(markdownText).characters) }
+        return blockTexts.prefix(4).joined(separator: " ")
     }
 
     private var sourceLine: String {

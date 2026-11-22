@@ -40,6 +40,28 @@ enum DemoSampleData {
     static let inboxTaskIdentifier = UUID(uuidString: "6A1D2E8B-0000-4000-8000-000000000003")!
     static let failedTaskIdentifier = UUID(uuidString: "6A1D2E8B-0000-4000-8000-000000000004")!
 
+    /// Long enough, and with enough structure, to show how a finished agent's report reads in the Activity page.
+    static let launchThreadReport = """
+    ## Launch thread summary
+
+    **The short version:** Priya moved the review to Thursday. The pricing page is the only blocker, and everything else is ready to ship.
+
+    ### What changed this week
+
+    - The review moved from Tuesday to **Thursday at 2 pm** so legal can read the new terms first.
+    - Sam finished the onboarding copy. It is in the shared folder as `onboarding-v4.md`.
+    - The pricing page still shows last quarter's plans. Dana owns the fix.
+
+    ### Open questions
+
+    1. Does the annual discount stay at 20 percent, or drop to 15?
+    2. Who signs off on the press note if Priya is travelling?
+
+    ### What I would do next
+
+    Reply to Dana today and ask for a date on the pricing page. If it slips past Wednesday, the review should move again instead of going ahead without it. The thread is [here](https://example.com/launch-thread).
+    """
+
     static func backgroundTasks(relativeTo now: Date) -> [BackgroundTask] {
         [
             BackgroundTask(
@@ -59,7 +81,7 @@ enum DemoSampleData {
                 status: .succeeded, workingDirectory: nil,
                 startedAt: now.addingTimeInterval(-900), finishedAt: now.addingTimeInterval(-780),
                 latestActivity: "Wrote the summary",
-                result: "Priya moved the review to Thursday. Pricing page is the only blocker."
+                result: launchThreadReport
             ),
         ]
     }

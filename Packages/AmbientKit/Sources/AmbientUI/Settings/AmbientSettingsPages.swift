@@ -578,6 +578,9 @@ struct AmbientActivitySettingsPage: View {
     @State private var backgroundTasks: [AmbientBackgroundTask]?
     @Binding var selectedTaskID: UUID?
     @State private var transcriptText: String?
+    /// A finished agent's report is shown by default; this switches to everything it printed while working.
+    @State private var isShowingActivityLog = false
+    @State private var didCopyReport = false
 
     var body: some View {
         AmbientSettingsPage(section: .activity, scrolls: false) {
@@ -621,6 +624,8 @@ struct AmbientActivitySettingsPage: View {
         }
         .task(id: selectedTaskID) {
             transcriptText = nil
+            isShowingActivityLog = false
+            didCopyReport = false
             guard let selectedTaskID else { return }
             // Re-read while the task runs so the transcript follows it.
             while !Task.isCancelled {
@@ -643,23 +648,65 @@ struct AmbientActivitySettingsPage: View {
                     Text(transcriptCaption(for: selectedTask))
                         .font(.system(size: 11.5))
                         .foregroundStyle(AmbientDesign.Palette.tertiaryText)
+                    if selectedTask.hasReport, let reportText = selectedTask.result {
+                        HStack(spacing: 6) {
+                            AmbientCapsuleButton(title: "Save as file", systemImageName: "square.and.arrow.down", prominence: .secondary, surface: .window, isCompact: true) {
+                                saveReport(reportText, title: selectedTask.title)
+                            }
+                            AmbientCapsuleButton(title: didCopyReport ? "Copied" : "Copy", prominence: .quiet, surface: .window, isCompact: true) {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(reportText, forType: .string)
+                                didCopyReport = true
+                            }
+                            Spacer(minLength: 8)
+                            AmbientCapsuleButton(title: isShowingActivityLog ? "Show report" : "Show activity log", prominence: .quiet, surface: .window, isCompact: true) {
+                                isShowingActivityLog.toggle()
+                            }
+                        }
+                        .padding(.top, 8)
+                        .padding(.leading, -2)
+                    }
                 }
                 .padding(14)
                 AmbientGroupDivider().padding(.leading, -14)
             }
             ScrollView(.vertical) {
-                Text(transcriptText ?? "Loading transcript")
-                    .font(.system(size: 11.5, design: .monospaced))
-                    .foregroundStyle(transcriptText == nil ? AmbientDesign.Palette.tertiaryText : AmbientDesign.Palette.primaryText)
-                    .lineSpacing(3)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(14)
+                if let selectedTask, selectedTask.hasReport, !isShowingActivityLog, let reportText = selectedTask.result {
+                    AmbientLightMarkdownView(markdownText: reportText, surface: .window)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: 620, alignment: .leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 16)
+                } else {
+                    Text(transcriptText ?? "Loading transcript")
+                        .font(.system(size: 11.5, design: .monospaced))
+                        .foregroundStyle(transcriptText == nil ? AmbientDesign.Palette.tertiaryText : AmbientDesign.Palette.primaryText)
+                        .lineSpacing(3)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(14)
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(AmbientDesign.Palette.cardBackground))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(AmbientDesign.Palette.cardHairline, lineWidth: 1))
+    }
+
+    /// Reports are markdown; the person picks where the file goes, so no folder access is needed up front.
+    private func saveReport(_ reportText: String, title: String) {
+        let savePanel = NSSavePanel()
+        let safeTitle = title.components(separatedBy: CharacterSet(charactersIn: "/:\\")).joined(separator: " ")
+        savePanel.nameFieldStringValue = "\(safeTitle).md"
+        savePanel.directoryURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+        guard savePanel.runModal() == .OK, let fileURL = savePanel.url else { return }
+        do {
+            try reportText.write(to: fileURL, atomically: true, encoding: .utf8)
+            NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+        } catch {
+            NSAlert(error: error).runModal()
+        }
     }
 
     private func transcriptCaption(for backgroundTask: AmbientBackgroundTask) -> String {
