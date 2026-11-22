@@ -11,15 +11,46 @@
   "app": {
     "windows": [],
     "macOSPrivateApi": true,
-    "security": { "csp": null }
+    "security": {
+      "csp": null
+    }
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
-    "windows": { "nsis": { "installMode": "currentUser" } }
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    },
+    "createUpdaterArtifacts": true
   },
   "plugins": {
-    "deep-link": { "desktop": { "schemes": ["ambient"] } }
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "ambient"
+        ]
+      }
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEMxQ0FGRTU3QTRENDRDOUIKUldTYlROU2tWLzdLd1lGcUdjRXJENkFnUmRPaURiTXNjaHRqRGFTV0I0RW1xd0t1YjZFeU45N2EK",
+      "endpoints": [
+        "https://publikhq.com/api/updates/ambient/latest.json"
+      ],
+      "requireSignedVersion": true,
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

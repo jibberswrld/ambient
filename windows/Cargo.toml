@@ -2,7 +2,7 @@
 # every subsystem crate depends only on ambient-contracts, never on a sibling.
 [workspace]
 resolver = "2"
-members = ["crates/*"]
+members = ["crates/*", "src-tauri"]
 
 [workspace.package]
 version = "0.1.7"
