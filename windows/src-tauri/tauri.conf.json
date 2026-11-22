@@ -17,6 +17,11 @@
   },
   "bundle": {
     "active": true,
+    "publisher": "Jabir O. Mohamed",
+    "copyright": "© 2026 Jabir O. Mohamed. MIT License.",
+    "homepage": "https://github.com/jibberswrld/ambient",
+    "category": "Productivity",
+    "shortDescription": "Ambient — a voice assistant that sits on your desktop",
     "targets": [
       "nsis"
     ],

@@ -55,6 +55,9 @@ jobs:
             pnpm tauri build --config '{"bundle":{"createUpdaterArtifacts":false}}'
           fi
 
+      - name: Scan the app and installer with Microsoft Defender
+        run: ./ci/scan.ps1 -Paths "target\release\ambient.exe","target\release\bundle\nsis\*.exe" -EvidenceDirectory "${{ runner.temp }}\evidence"
+
       - name: Prove screen capture works on Windows
         run: cargo run --release -p ambient-platform --example capture -- "${{ runner.temp }}\evidence\captures"
 
