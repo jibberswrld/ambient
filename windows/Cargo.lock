@@ -56,7 +56,7 @@ dependencies = [
 
 [[package]]
 name = "ambient"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "ambient-agent",
  "ambient-background",
@@ -86,7 +86,7 @@ dependencies = [
 
 [[package]]
 name = "ambient-agent"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "ambient-contracts",
  "async-trait",
@@ -104,7 +104,7 @@ dependencies = [
 
 [[package]]
 name = "ambient-background"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "ambient-contracts",
  "async-trait",
@@ -123,7 +123,7 @@ dependencies = [
 
 [[package]]
 name = "ambient-connectors"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "ambient-contracts",
  "async-trait",
@@ -135,7 +135,7 @@ dependencies = [
 
 [[package]]
 name = "ambient-contracts"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "async-trait",
  "chrono",
@@ -147,7 +147,7 @@ dependencies = [
 
 [[package]]
 name = "ambient-memory"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "ambient-contracts",
  "async-trait",
@@ -161,7 +161,7 @@ dependencies = [
 
 [[package]]
 name = "ambient-platform"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "ambient-contracts",
  "cpal",
