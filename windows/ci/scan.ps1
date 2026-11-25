@@ -9,10 +9,16 @@ $defender = Join-Path $env:ProgramFiles "Windows Defender\MpCmdRun.exe"
 # Runners ship with Defender's live protection off. Turn it on the way a home PC has it (real-time and behaviour
 # monitoring, cloud protection, automatic sample submission); it stays on for the rest of the job, so installing and
 # running Ambient afterwards happens under it.
+# The runner image turns it off through policy, which outranks Set-MpPreference, so clear those policies first.
+"Policies before: " + ((Get-ChildItem "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender" -Recurse -ErrorAction SilentlyContinue | ForEach-Object { $_.Name + " " + (($_.Property) -join ",") }) -join " ; ") | Tee-Object -FilePath $report
+Remove-Item "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender" -Recurse -Force -ErrorAction SilentlyContinue
 Set-MpPreference -DisableRealtimeMonitoring $false -DisableBehaviorMonitoring $false -DisableIOAVProtection $false -MAPSReporting Advanced -SubmitSamplesConsent SendSafeSamples
+for ($i = 0; $i -lt 30 -and -not (Get-MpComputerStatus).RealTimeProtectionEnabled; $i++) { Start-Sleep -Seconds 1 }
 $status = Get-MpComputerStatus
 "Defender engine: $($status.AMEngineVersion), signatures: $($status.AntivirusSignatureVersion)" | Tee-Object -FilePath $report
-"Real-time: $($status.RealTimeProtectionEnabled), behaviour monitoring: $($status.BehaviorMonitorEnabled), cloud: $((Get-MpPreference).MAPSReporting)" | Tee-Object -FilePath $report -Append
+"Real-time: $($status.RealTimeProtectionEnabled), behaviour monitoring: $($status.BehaviorMonitorEnabled), cloud: $((Get-MpPreference).MAPSReporting), mode: $($status.AMRunningMode)" | Tee-Object -FilePath $report -Append
+# Without live protection the later "no detections" check would prove nothing.
+if (-not ($status.RealTimeProtectionEnabled -and $status.BehaviorMonitorEnabled)) { throw "Could not turn on Defender's live protection on the runner" }
 
 $failed = $false
 foreach ($pattern in $Paths) {
