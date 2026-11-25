@@ -6,7 +6,13 @@ New-Item -ItemType Directory -Force -Path $EvidenceDirectory | Out-Null
 $report = Join-Path $EvidenceDirectory "defender-scan.txt"
 $defender = Join-Path $env:ProgramFiles "Windows Defender\MpCmdRun.exe"
 & $defender -SignatureUpdate | Out-Null
-"Defender engine: $((Get-MpComputerStatus).AMEngineVersion), signatures: $((Get-MpComputerStatus).AntivirusSignatureVersion)" | Tee-Object -FilePath $report
+# Runners ship with Defender's live protection off. Turn it on the way a home PC has it (real-time and behaviour
+# monitoring, cloud protection, automatic sample submission); it stays on for the rest of the job, so installing and
+# running Ambient afterwards happens under it.
+Set-MpPreference -DisableRealtimeMonitoring $false -DisableBehaviorMonitoring $false -DisableIOAVProtection $false -MAPSReporting Advanced -SubmitSamplesConsent SendSafeSamples
+$status = Get-MpComputerStatus
+"Defender engine: $($status.AMEngineVersion), signatures: $($status.AntivirusSignatureVersion)" | Tee-Object -FilePath $report
+"Real-time: $($status.RealTimeProtectionEnabled), behaviour monitoring: $($status.BehaviorMonitorEnabled), cloud: $((Get-MpPreference).MAPSReporting)" | Tee-Object -FilePath $report -Append
 
 $failed = $false
 foreach ($pattern in $Paths) {

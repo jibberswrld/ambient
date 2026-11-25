@@ -61,8 +61,25 @@ jobs:
       - name: Prove screen capture works on Windows
         run: cargo run --release -p ambient-platform --example capture -- "${{ runner.temp }}\evidence\captures"
 
-      - name: Run the built app end to end against a mock publik
-        run: ./ci/smoke.ps1 -AmbientExecutable "target\release\ambient.exe" -EvidenceDirectory "${{ runner.temp }}\evidence"
+      - name: Install it the way a user would
+        run: |
+          $setup = Get-ChildItem "target\release\bundle\nsis\*-setup.exe" | Select-Object -First 1
+          Start-Process $setup.FullName -ArgumentList "/S" -Wait
+          $installed = Join-Path $env:LOCALAPPDATA "Ambient\ambient.exe"
+          if (-not (Test-Path $installed)) { throw "The installer did not put ambient.exe at $installed" }
+          "AMBIENT_INSTALLED=$installed" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Run the installed app end to end against a mock publik
+        run: ./ci/smoke.ps1 -AmbientExecutable "$env:AMBIENT_INSTALLED" -EvidenceDirectory "${{ runner.temp }}\evidence"
+
+      - name: Fail if Defender flagged anything while Ambient installed and ran
+        if: always()
+        run: |
+          $detections = @(Get-MpThreatDetection)
+          $report = "${{ runner.temp }}\evidence\defender-scan.txt"
+          "`n== Live detections after install and run: $($detections.Count)" | Tee-Object -FilePath $report -Append
+          $detections | Format-List * | Out-String | Tee-Object -FilePath $report -Append
+          if ($detections.Count -gt 0) { throw "Defender flagged something while Ambient was installed or running" }
 
       - name: Keep the evidence
         if: always()
