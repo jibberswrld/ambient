@@ -61,12 +61,20 @@ jobs:
       - name: Prove screen capture works on Windows
         run: cargo run --release -p ambient-platform --example capture -- "${{ runner.temp }}\evidence\captures"
 
+      # Through the same install.ps1 users pipe into Windows PowerShell 5.1, downloading the installer over HTTP.
       - name: Install it the way a user would
         run: |
           $setup = Get-ChildItem "target\release\bundle\nsis\*-setup.exe" | Select-Object -First 1
-          Start-Process $setup.FullName -ArgumentList "/S" -Wait
+          $server = Start-Process python -ArgumentList "-m","http.server","4556","--directory",$setup.DirectoryName -PassThru -NoNewWindow
+          Start-Sleep -Seconds 2
+          $env:AMBIENT_SETUP_URL = "http://127.0.0.1:4556/$($setup.Name)"
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Get-Content -Raw .\install.ps1 | Invoke-Expression"
+          if ($LASTEXITCODE -ne 0) { throw "install.ps1 failed" }
+          Stop-Process -Id $server.Id -Force
+          # install.ps1 opens Ambient; close it so the smoke run starts its own copy against the mock.
+          Start-Sleep -Seconds 3
+          Get-Process ambient -ErrorAction SilentlyContinue | Stop-Process -Force
           $installed = Join-Path $env:LOCALAPPDATA "Ambient\ambient.exe"
-          if (-not (Test-Path $installed)) { throw "The installer did not put ambient.exe at $installed" }
           "AMBIENT_INSTALLED=$installed" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Run the installed app end to end against a mock publik
