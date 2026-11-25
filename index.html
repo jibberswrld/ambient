@@ -1,0 +1,652 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ambient — a voice assistant at the edge of your screen</title>
+<meta name="description" content="Hold two keys, say what you want, let go. Ambient answers out loud, points at things on your screen and hands longer jobs to background agents. For Mac and Windows.">
+<meta property="og:title" content="Ambient — Hold two keys. Just ask.">
+<meta property="og:description" content="A voice assistant that lives in a small bar at the edge of your screen. For Mac and Windows.">
+<meta property="og:image" content="https://jibberswrld.github.io/ambient/assets/og.jpg">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#f5f2ed">
+<link rel="icon" href="favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400..600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* every neutral carries the same warm hue */
+  --paper:#f5f2ed; --paper-2:#efebe5; --paper-3:#e7e2da; --card:#fbfaf7;
+  --ink:#24201c; --ink-2:rgba(36,32,28,.70); --ink-3:rgba(36,32,28,.54); --ink-4:rgba(36,32,28,.38);
+  --line:rgba(36,32,28,.10); --line-2:rgba(36,32,28,.16);
+  --night:#1c1917; --night-2:#262220; --night-line:rgba(255,246,236,.10);
+  --on-night:rgba(255,248,240,.93); --on-night-2:rgba(255,248,240,.58);
+  --ember:#ee8a45; --ember-hi:#f6b37a;
+  --serif:"Instrument Serif",ui-serif,Georgia,serif;
+  --sans:"Instrument Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+  --ease:cubic-bezier(.4,0,.2,1); --out:cubic-bezier(.16,1,.3,1);
+  --wrap:1200px; --gutter:clamp(20px,4vw,48px);
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font:450 15px/1.6 var(--sans);letter-spacing:.002em;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+a{color:inherit}
+img{display:block;max-width:100%;height:auto}
+.wrap{max-width:var(--wrap);margin:0 auto;padding:0 var(--gutter)}
+::selection{background:rgba(238,138,69,.28)}
+:focus-visible{outline:2px solid var(--ink);outline-offset:3px;border-radius:6px}
+
+/* nav */
+nav{position:sticky;top:0;z-index:20;background:rgba(245,242,237,.82);backdrop-filter:saturate(1.4) blur(14px);-webkit-backdrop-filter:saturate(1.4) blur(14px);border-bottom:1px solid transparent;transition:border-color .15s var(--ease)}
+nav.scrolled{border-bottom-color:var(--line)}
+nav .wrap{display:flex;align-items:center;justify-content:space-between;height:60px}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none;font-weight:560;font-size:16px;letter-spacing:-.01em}
+.brand img{width:26px;height:26px;border-radius:6px}
+.navlinks{display:flex;align-items:center;gap:26px;font-size:14px}
+.navlinks a{text-decoration:none;color:var(--ink-2);transition:color .15s var(--ease)}
+.navlinks a:hover{color:var(--ink)}
+.navlinks .btn{color:var(--paper)}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;gap:9px;height:44px;padding:0 20px;border-radius:999px;background:var(--ink);color:var(--paper);text-decoration:none;font:540 15px/1 var(--sans);letter-spacing:-.003em;border:0;cursor:pointer;transition:background .15s var(--ease),transform .1s var(--ease);white-space:nowrap}
+.btn:hover{background:#3a342e}
+.btn:active{transform:scale(.97)}
+.btn svg{width:17px;height:17px;flex:none}
+.btn.sm{height:34px;padding:0 15px;font-size:14px}
+.btn.ghost{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1px var(--line-2)}
+.btn.ghost:hover{background:rgba(36,32,28,.04);box-shadow:inset 0 0 0 1px rgba(36,32,28,.3)}
+.textlink{color:var(--ink-2);text-decoration:underline;text-decoration-color:var(--line-2);text-underline-offset:3px;transition:color .15s var(--ease),text-decoration-color .15s var(--ease)}
+.textlink:hover{color:var(--ink);text-decoration-color:var(--ink-3)}
+
+/* hero */
+.hero{padding:clamp(56px,9vw,112px) 0 0}
+.hero-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:24px;align-items:end}
+h1{grid-column:1/8;margin:0;font:400 clamp(56px,8.6vw,112px)/.94 var(--serif);letter-spacing:-.025em}
+h1 em{font-style:italic;color:var(--ink-2)}
+.hero-side{grid-column:8/13;padding-bottom:10px}
+.lede{margin:0 0 26px;font-size:17px;line-height:1.55;color:var(--ink-2);max-width:420px}
+.ctas{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.meta{margin-top:16px;font-size:13px;color:var(--ink-3)}
+.meta span+span::before{content:"·";margin:0 8px;color:var(--ink-4)}
+
+/* stage: the signature */
+.stage-wrap{margin-top:clamp(40px,6vw,72px)}
+.stage{position:relative;height:clamp(420px,38vw,500px);border-radius:14px;overflow:hidden;isolation:isolate;
+  background:
+    radial-gradient(120% 90% at 12% 100%,rgba(238,138,69,.13),transparent 60%),
+    radial-gradient(90% 80% at 100% 0%,rgba(150,128,190,.10),transparent 60%),
+    linear-gradient(180deg,#ece6de,#e5ded4);
+  box-shadow:0 0 0 1px var(--line),0 1px 2px rgba(60,40,20,.04),0 12px 32px -12px rgba(60,40,20,.10);
+  user-select:none;-webkit-user-select:none;touch-action:manipulation}
+.menubar{position:absolute;inset:0 0 auto 0;height:26px;display:flex;align-items:center;gap:18px;padding:0 16px;font-size:12px;font-weight:520;color:rgba(36,32,28,.62);background:rgba(250,247,243,.5);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.menubar b{font-weight:600;color:rgba(36,32,28,.85)}
+.menubar .clock{margin-left:auto;font-variant-numeric:tabular-nums}
+.doc{position:absolute;left:50%;top:58px;width:min(640px,82%);transform:translateX(-50%);background:var(--card);border-radius:10px;box-shadow:0 0 0 1px rgba(36,32,28,.08),0 2px 4px rgba(60,40,20,.04),0 18px 40px -16px rgba(60,40,20,.16);padding:0 0 28px}
+.doc-bar{display:flex;align-items:center;gap:7px;height:40px;padding:0 14px;border-bottom:1px solid var(--line)}
+.doc-bar i{width:11px;height:11px;border-radius:50%;background:#e7e1d9;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.08)}
+.doc-bar i:nth-child(1){background:#ef6a5e}.doc-bar i:nth-child(2){background:#f4bf4f}.doc-bar i:nth-child(3){background:#61c454}
+.doc-tools{margin-left:auto;display:flex;gap:6px;position:relative}
+.doc-tools span{font-size:12px;font-weight:520;color:var(--ink-2);padding:4px 10px;border-radius:6px;box-shadow:inset 0 0 0 1px var(--line)}
+.doc-body{padding:26px 36px 0}
+.doc-body h3{margin:0 0 10px;font:600 22px/1.2 var(--sans);letter-spacing:-.02em}
+.doc-body p{margin:0 0 8px;color:var(--ink-3);font-size:14px;line-height:1.65}
+.doc-body p.dim{color:var(--ink-4)}
+
+/* annotation drawn on the "screen" */
+.mark{position:absolute;pointer-events:none;overflow:visible}
+.mark ellipse{fill:none;stroke:var(--ember);stroke-width:3;stroke-linecap:round;filter:drop-shadow(0 0 6px rgba(238,138,69,.35));stroke-dasharray:300;stroke-dashoffset:300}
+.mark.on ellipse{transition:stroke-dashoffset .7s var(--out);stroke-dashoffset:0}
+.mark-cap{position:absolute;display:flex;align-items:center;gap:7px;padding:4px 11px 4px 5px;border-radius:999px;background:rgba(48,44,42,.92);color:#fff;font-size:12.5px;font-weight:540;white-space:nowrap;opacity:0;transform:translateY(-4px);transition:opacity .2s var(--ease),transform .25s var(--out);box-shadow:0 6px 16px -6px rgba(0,0,0,.3)}
+.mark-cap b{width:18px;height:18px;border-radius:50%;background:var(--ember);color:#24201c;display:grid;place-items:center;font-size:11px;font-weight:650}
+.mark-cap.on{opacity:1;transform:none}
+
+/* the bar */
+.dock{position:absolute;left:0;right:0;bottom:18px;display:flex;flex-direction:column;align-items:center;gap:10px;z-index:5}
+.heard{min-height:30px;display:flex;align-items:center;padding:0 14px;border-radius:999px;background:rgba(28,25,23,.78);color:var(--on-night);font-size:13.5px;font-weight:480;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);opacity:0;transform:translateY(4px);transition:opacity .18s var(--ease),transform .25s var(--out);max-width:88%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.heard.on{opacity:1;transform:none}
+.heard.nudge{background:rgba(255,250,244,.9);color:var(--ink);box-shadow:0 0 0 1px var(--line)}
+.bar{position:relative;height:30px;width:84px;border-radius:999px;background:linear-gradient(180deg,#2a2624,#1b1917);box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 0 0 1px rgba(0,0,0,.35),0 10px 24px -10px rgba(30,20,10,.45);display:flex;align-items:center;justify-content:center;gap:3px;cursor:pointer;transition:width .28s var(--out),height .28s var(--out);-webkit-tap-highlight-color:transparent}
+.bar:active{filter:brightness(1.15)}
+.bar .wv{display:flex;align-items:center;gap:3px;height:100%}
+.bar .wv i{display:block;width:3px;height:4px;border-radius:2px;background:rgba(255,248,240,.35);transition:height .09s linear,background .2s var(--ease)}
+.bar[data-state=listening]{width:212px;height:46px}
+.bar[data-state=listening]::before{content:"";position:absolute;inset:6px 30px;border-radius:999px;background:radial-gradient(closest-side,rgba(238,138,69,.20),transparent);pointer-events:none}
+.bar[data-state=listening] .wv i{width:4px;background:linear-gradient(180deg,var(--ember-hi),var(--ember))}
+.bar[data-state=thinking],.bar[data-state=responding]{width:132px;height:38px}
+.bar[data-state=thinking] .wv i{animation:pulse 1s var(--ease) infinite;animation-delay:calc(var(--n) * 70ms)}
+@keyframes pulse{0%,100%{height:4px;background:rgba(255,248,240,.3)}40%{height:12px;background:var(--ember)}}
+.bar[data-state=responding] .wv i{height:6px;width:4px;background:rgba(238,138,69,.8)}
+
+.reply{position:absolute;left:50%;bottom:76px;width:min(440px,90%);transform:translate(-50%,10px) scale(.98);opacity:0;pointer-events:none;z-index:6;background:rgba(26,23,22,.94);color:var(--on-night);border-radius:20px;padding:16px 18px 12px;box-shadow:inset 0 0 0 1px var(--night-line),0 1px 2px rgba(0,0,0,.2),0 24px 48px -20px rgba(20,12,6,.55);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);transition:opacity .2s var(--ease),transform .3s var(--out)}
+.reply.on{opacity:1;transform:translate(-50%,0) scale(1)}
+.reply p{margin:0;font-size:15px;line-height:1.5;min-height:22px}
+.reply p b{font-weight:600;color:#fff}
+.reply-foot{display:flex;align-items:center;justify-content:space-between;margin-top:10px;font-size:12.5px;color:var(--on-night-2)}
+.reply-foot span:last-child{display:flex;gap:14px}
+.task{position:absolute;right:18px;bottom:18px;z-index:5;display:flex;align-items:center;gap:9px;padding:7px 13px 7px 10px;border-radius:12px;background:rgba(26,23,22,.92);color:var(--on-night);font-size:12.5px;font-weight:500;box-shadow:inset 0 0 0 1px var(--night-line),0 12px 28px -12px rgba(20,12,6,.5);opacity:0;transform:translateY(6px);transition:opacity .2s var(--ease),transform .3s var(--out)}
+.task.on{opacity:1;transform:none}
+.task small{color:var(--on-night-2);font-variant-numeric:tabular-nums;font-size:12px}
+.spin{width:13px;height:13px;border-radius:50%;border:2px solid rgba(238,138,69,.25);border-top-color:var(--ember);animation:spin .9s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.try{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:14px;font-size:13.5px;color:var(--ink-3)}
+.try .keys{display:flex;align-items:center;gap:8px;color:var(--ink-2)}
+kbd{display:inline-flex;align-items:center;height:26px;padding:0 9px;border-radius:6px;background:var(--card);box-shadow:inset 0 0 0 1px var(--line-2),0 1px 0 var(--line-2);font:520 12.5px/1 var(--sans);color:var(--ink);transition:background .1s var(--ease),transform .1s var(--ease),box-shadow .1s var(--ease)}
+kbd.down{background:var(--paper-3);transform:translateY(1px);box-shadow:inset 0 0 0 1px var(--line-2)}
+
+/* sections */
+section{border-top:1px solid var(--line)}
+.sec{padding-top:clamp(72px,10vw,128px);padding-bottom:clamp(72px,10vw,128px)}
+.eyebrow{font:520 12px/1 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin:0 0 18px}
+h2{margin:0;font:400 clamp(38px,5vw,60px)/1.02 var(--serif);letter-spacing:-.02em}
+h2 em{font-style:italic;color:var(--ink-2)}
+h3{margin:0 0 8px;font:560 18px/1.3 var(--sans);letter-spacing:-.012em}
+.muted{color:var(--ink-2)}
+
+.feat-head{display:grid;grid-template-columns:repeat(12,1fr);gap:24px;margin-bottom:56px}
+.feat-head h2{grid-column:1/8}
+.feat-head p{grid-column:8/13;align-self:end;margin:0;color:var(--ink-2);font-size:16px}
+
+.shot{border-radius:12px;overflow:hidden;box-shadow:0 0 0 1px var(--line),0 12px 32px -16px rgba(60,40,20,.18);background:var(--paper-2)}
+.lead{display:grid;grid-template-columns:repeat(12,1fr);gap:24px;align-items:center;padding-bottom:56px;border-bottom:1px solid var(--line)}
+.lead .shot{grid-column:1/9;min-width:0}
+.lead .copy{grid-column:9/13;padding-left:8px}
+.copy p{margin:0;color:var(--ink-2)}
+.pair{display:grid;grid-template-columns:repeat(12,1fr);gap:24px;padding-top:56px}
+.pair figure{margin:0}
+.pair figure:first-child{grid-column:1/8}
+.pair figure:last-child{grid-column:8/13;padding-top:72px}
+.pair figcaption{margin-top:20px}
+.pair figcaption p{margin:0;color:var(--ink-2)}
+
+.index{margin-top:72px;display:grid;grid-template-columns:repeat(12,1fr);gap:24px}
+.index h3.lbl{grid-column:1/4;font:520 12px/1.6 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin:0;padding-top:16px}
+.index dl{grid-column:4/13;margin:0}
+.index .row{display:grid;grid-template-columns:5fr 7fr;gap:24px;padding:16px 0;border-top:1px solid var(--line)}
+.index .row:last-child{border-bottom:1px solid var(--line)}
+.index dt{font-weight:540}
+.index dd{margin:0;color:var(--ink-2)}
+
+/* download */
+#download{background:var(--paper-2)}
+.dl-head{display:flex;align-items:end;justify-content:space-between;gap:24px;margin-bottom:48px;flex-wrap:wrap}
+.dl-head p{margin:0;color:var(--ink-2);max-width:380px}
+.dl{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:16px}
+.panel{position:relative;background:var(--card);border-radius:12px;padding:32px;box-shadow:0 0 0 1px var(--line),0 1px 2px rgba(60,40,20,.03);scroll-margin-top:90px;transition:box-shadow .2s var(--ease)}
+.panel.hl{box-shadow:0 0 0 1px var(--line),0 0 0 4px rgba(238,138,69,.25)}
+.panel-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px}
+.os{display:flex;align-items:center;gap:12px}
+.os svg{width:22px;height:22px}
+.os h3{margin:0;font-size:20px}
+.req{font-size:13px;color:var(--ink-3)}
+.panel .btn{margin-bottom:24px}
+.steps{margin:0;padding:0;list-style:none;counter-reset:s;font-size:14px;color:var(--ink-2)}
+.steps li{counter-increment:s;display:flex;gap:12px;padding:9px 0;border-top:1px solid var(--line)}
+.steps li::before{content:counter(s);font-variant-numeric:tabular-nums;color:var(--ink-4);width:12px;flex:none}
+.cmd-label{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:var(--ink-3);margin-bottom:8px}
+.cmd-label span{white-space:nowrap}
+.cmd-label b{color:var(--ink);font-weight:560}
+.cmd{display:flex;align-items:stretch;border-radius:8px;background:var(--night);box-shadow:inset 0 0 0 1px rgba(0,0,0,.4);overflow:hidden;margin-bottom:12px}
+.cmd code{flex:1;min-width:0;padding:14px 16px;font:13px/1.5 var(--mono);color:var(--on-night);overflow-x:auto;white-space:nowrap;scrollbar-width:none}
+.cmd code::-webkit-scrollbar{display:none}
+.cmd code .p{color:var(--ember)}
+.copy-btn{flex:none;border:0;border-left:1px solid var(--night-line);background:var(--night-2);color:var(--on-night);font:520 13px/1 var(--sans);padding:0 16px;cursor:pointer;display:flex;align-items:center;gap:7px;min-width:92px;justify-content:center;transition:background .15s var(--ease)}
+.copy-btn:hover{background:#322d2a}
+.copy-btn svg{width:14px;height:14px}
+.note{font-size:13.5px;color:var(--ink-3);margin:0 0 24px}
+.alt{display:flex;align-items:flex-start;gap:14px;padding-top:20px;border-top:1px solid var(--line);font-size:14px;color:var(--ink-2)}
+.alt p{margin:0}
+.alt .btn{margin:0;flex:none}
+.dl-foot{margin-top:24px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;font-size:13.5px;color:var(--ink-3)}
+.ver{font-variant-numeric:tabular-nums}
+
+/* privacy */
+.priv{display:grid;grid-template-columns:repeat(12,1fr);gap:24px}
+.priv-head{grid-column:1/6}
+.priv ol{grid-column:7/13;list-style:none;margin:0;padding:0}
+.priv li{display:grid;grid-template-columns:40px 1fr;padding:20px 0;border-top:1px solid var(--line)}
+.priv li:last-child{border-bottom:1px solid var(--line)}
+.priv li span{font:400 22px/1.2 var(--serif);color:var(--ink-4)}
+.priv li p{margin:4px 0 0;color:var(--ink-2)}
+
+footer{border-top:1px solid var(--line);padding:40px 0 56px;font-size:13.5px;color:var(--ink-3)}
+footer .wrap{display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap}
+footer nav{all:unset;display:flex;gap:22px;flex-wrap:wrap}
+footer a{text-decoration:none;color:var(--ink-2)}
+footer a:hover{color:var(--ink)}
+
+@media (max-width:900px){
+  .navlinks a:not(.btn){display:none}
+  h1,.hero-side,.feat-head h2,.feat-head p,.lead .shot,.lead .copy,.pair figure:first-child,.pair figure:last-child,.index h3.lbl,.index dl,.priv-head,.priv ol{grid-column:1/-1}
+  .hero-side{padding-bottom:0}
+  .lead .copy{padding-left:0}
+  .pair figure:last-child{padding-top:24px}
+  .dl{grid-template-columns:minmax(0,1fr)}
+  .index .row{grid-template-columns:1fr;gap:2px}
+  .priv{row-gap:32px}
+  .stage{height:480px}
+  .doc{width:90%}
+  .doc-body{padding:20px 22px 0}
+  .doc-body p.dim{display:none}
+  .try{flex-direction:column;align-items:flex-start;gap:8px}
+  .task{right:50%;transform:translate(50%,6px);bottom:auto;top:40px}
+  .task.on{transform:translate(50%,0)}
+  .alt{flex-direction:column}
+  .panel{padding:24px}
+  .cmd-label span{display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition-duration:0s!important;animation-duration:0s!important;animation-iteration-count:1!important;scroll-behavior:auto!important}
+}
+</style>
+</head>
+<body>
+
+<nav id="nav">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="Ambient home"><img src="assets/icon.png" alt="" width="26" height="26">Ambient</a>
+    <div class="navlinks">
+      <a href="#features">Features</a>
+      <a href="#privacy">Privacy</a>
+      <a href="https://github.com/jibberswrld/ambient">GitHub</a>
+      <a class="btn sm" href="#download">Download</a>
+    </div>
+  </div>
+</nav>
+
+<main id="top">
+  <header class="hero">
+    <div class="wrap">
+      <div class="hero-grid">
+        <h1>Hold two keys.<br><em>Just ask.</em></h1>
+        <div class="hero-side">
+          <p class="lede">Ambient is a voice assistant that lives in a small bar at the edge of your screen. It answers out loud, points at things on your screen, and hands longer jobs to agents that work in the background.</p>
+          <div class="ctas">
+            <a class="btn" id="primary-cta" href="#download"></a>
+            <a class="btn ghost" id="secondary-cta" href="#download"></a>
+          </div>
+          <div class="meta"><span>Free download</span><span class="ver" data-version>Mac &amp; Windows</span><span>Open source</span></div>
+        </div>
+      </div>
+
+      <div class="stage-wrap">
+        <div class="stage" id="stage" aria-label="Interactive demo of the Ambient bar">
+          <div class="menubar"><b>Notes</b><span>File</span><span>Edit</span><span>View</span><span class="clock" id="clock">9:41</span></div>
+          <div class="doc" id="doc">
+            <div class="doc-bar"><i></i><i></i><i></i>
+              <div class="doc-tools"><span>Share</span><span id="export-btn">Export</span></div>
+            </div>
+            <div class="doc-body">
+              <h3>Launch plan</h3>
+              <p>The review moves to Thursday. Pricing page ships first, then the onboarding copy, then the docs.</p>
+              <p>Priya owns the announcement. Send her the final screenshots by Wednesday noon.</p>
+              <p class="dim">Open questions: do we keep the waitlist, and who answers support the first week?</p>
+            </div>
+          </div>
+          <svg class="mark" id="mark" aria-hidden="true"><ellipse id="mark-ellipse"></ellipse></svg>
+          <div class="mark-cap" id="mark-cap"><b>1</b>Export</div>
+
+          <div class="reply" id="reply" role="status" aria-live="polite">
+            <p id="reply-text"></p>
+            <div class="reply-foot"><span id="reply-steps">1 step</span><span><span>Copy</span><span>Reply</span></span></div>
+          </div>
+          <div class="task" id="task"><span class="spin"></span>Tidy the Downloads folder <small id="task-time">0:00</small></div>
+
+          <div class="dock">
+            <div class="heard" id="heard"></div>
+            <div class="bar" id="bar" data-state="resting" role="button" tabindex="0" aria-label="Press and hold to talk"><div class="wv" id="wv"></div></div>
+          </div>
+        </div>
+        <div class="try">
+          <div class="keys"><span>Try it here: hold</span><kbd id="k1">control</kbd><span>+</span><kbd id="k2">option</kbd><span class="hide-touch">and let go</span></div>
+          <span id="try-alt">or press and hold the bar</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <section id="features">
+    <div class="wrap sec">
+      <div class="feat-head">
+        <h2>A little bar.<br><em>Room for everything else.</em></h2>
+        <p>Ambient never opens a window to talk to you. Speak, let go, and the answer arrives where you already are, spoken as it is written.</p>
+      </div>
+
+      <div class="lead">
+        <div class="shot"><img src="assets/drawing.jpg" alt="Ambient's annotations on screen: a circled button, an arrow and numbered captions such as Click Share and Then pick a person" width="1800" height="1120" loading="lazy"></div>
+        <div class="copy">
+          <p class="eyebrow">On your screen</p>
+          <h3>It shows you, not just tells you.</h3>
+          <p>Ask where something is or how to do it. Ambient looks at your screen, then circles, points and draws numbered steps right on top of it. Drawings stay until you clear them.</p>
+        </div>
+      </div>
+
+      <div class="pair">
+        <figure>
+          <div class="shot"><img src="assets/agents.jpg" alt="Ambient's background tray with four agents: two running, one failed with a reason, one finished with its summary" width="1520" height="1120" loading="lazy"></div>
+          <figcaption><h3>Hand off the long jobs.</h3><p>Say “start an agent” and it runs headless while you keep working: research, a refactor, a test run. Use Ambient's own agent, or Codex and Claude Code if you have them.</p></figcaption>
+        </figure>
+        <figure>
+          <div class="shot"><img src="assets/approval.jpg" alt="Ambient asking: Start a Codex agent? with Deny and Allow buttons" width="1520" height="1120" loading="lazy"></div>
+          <figcaption><h3>It asks first.</h3><p>Anything that runs on your machine waits for your Allow.</p></figcaption>
+        </figure>
+      </div>
+
+      <div class="index">
+        <h3 class="lbl">Also in the box</h3>
+        <dl>
+          <div class="row"><dt>Docks to any edge</dt><dd>Drag the bar to the top, bottom or either side. It remembers where you left it.</dd></div>
+          <div class="row"><dt>Remembers what matters</dt><dd>It learns as you use it, and you can read, edit or delete everything it knows.</dd></div>
+          <div class="row"><dt>Skills you can write</dt><dd>A skill is a plain <code>SKILL.md</code> folder. Drop in your own.</dd></div>
+          <div class="row"><dt>A tour on your real desktop</dt><dd>First launch teaches each part with the real bar, not a slideshow.</dd></div>
+          <div class="row"><dt>Updates itself</dt><dd>New versions download in the background and ask before relaunching.</dd></div>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <section id="download">
+    <div class="wrap sec">
+      <div class="dl-head">
+        <div><p class="eyebrow">Download</p><h2>Get Ambient.</h2></div>
+        <p>Free to download. On first launch you sign in with <a class="textlink" href="https://publikhq.com/ambient">publik</a>, which provides the AI, speech and search.</p>
+      </div>
+
+      <div class="dl">
+        <div class="panel" id="mac">
+          <div class="panel-top">
+            <div class="os"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.37 12.6c-.02-2.2 1.8-3.26 1.88-3.31-1.03-1.5-2.62-1.7-3.18-1.73-1.35-.14-2.64.8-3.33.8-.69 0-1.74-.78-2.87-.76-1.47.02-2.83.86-3.59 2.18-1.53 2.66-.39 6.59 1.1 8.75.73 1.05 1.6 2.24 2.73 2.2 1.1-.05 1.51-.71 2.84-.71 1.32 0 1.7.71 2.86.69 1.18-.02 1.93-1.07 2.65-2.13.84-1.22 1.18-2.4 1.2-2.46-.03-.01-2.3-.88-2.3-3.51zM14.2 6.13c.6-.73 1.01-1.75.9-2.76-.87.04-1.92.58-2.54 1.31-.56.64-1.05 1.68-.92 2.67.97.08 1.96-.49 2.56-1.22z"/></svg><h3>Mac</h3></div>
+            <span class="req">macOS 14.2 or later</span>
+          </div>
+          <a class="btn" id="mac-dl" href="https://github.com/jibberswrld/ambient/releases/latest/download/Ambient-macos.dmg">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3v10m0 0-4-4m4 4 4-4M4 16h12"/></svg>
+            Download for Mac <span class="req" style="color:rgba(245,242,237,.6)" data-mac-size></span>
+          </a>
+          <ol class="steps">
+            <li><span>Open <code>Ambient-macos.dmg</code> and drag Ambient into Applications.</span></li>
+            <li><span>Launch it and sign in with publik.</span></li>
+            <li><span>Allow the microphone, Accessibility (for the shortcut) and Screen Recording. Then hold <kbd>control</kbd> + <kbd>option</kbd>.</span></li>
+          </ol>
+        </div>
+
+        <div class="panel" id="windows">
+          <div class="panel-top">
+            <div class="os"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.1 10.4 4v7.2H3V5.1zm8.3-1.2L21 2.5v8.7h-9.7V3.9zM3 12.6h7.4v7.3L3 18.9v-6.3zm8.3 0H21v8.9l-9.7-1.4v-7.5z"/></svg><h3>Windows</h3></div>
+            <span class="req">Windows 10 or 11, 64-bit</span>
+          </div>
+          <div class="cmd-label"><b>Recommended: install from PowerShell</b><span>Start → PowerShell</span></div>
+          <div class="cmd">
+            <code id="ps-cmd"><span class="p">&gt;</span> irm https://raw.githubusercontent.com/jibberswrld/ambient/main/windows/install.ps1 | iex</code>
+            <button class="copy-btn" id="copy" type="button"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="2"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg><span>Copy</span></button>
+          </div>
+          <p class="note">Paste it into PowerShell and press Enter. It downloads the newest installer, installs Ambient and opens it, with no SmartScreen prompt. Windows Defender still scans it as usual. Then hold <kbd>Ctrl</kbd> + <kbd>Alt</kbd>.</p>
+          <div class="alt">
+            <a class="btn ghost sm" id="win-dl" href="https://github.com/jibberswrld/ambient/releases/latest">Download .exe <span class="req" data-win-size></span></a>
+            <p>Prefer a normal installer? The installer isn't code-signed yet, so SmartScreen will warn. Choose <b>More info → Run anyway</b>.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="dl-foot">
+        <span class="ver" id="release-line">Latest release on GitHub</span>
+        <a class="textlink" href="https://github.com/jibberswrld/ambient/releases">All releases and notes</a>
+      </div>
+    </div>
+  </section>
+
+  <section id="privacy">
+    <div class="wrap sec priv">
+      <div class="priv-head"><p class="eyebrow">Privacy</p><h2>Quiet <em>by default.</em></h2></div>
+      <ol>
+        <li><span>1</span><div><h3>Your screen stays yours.</h3><p>Nothing on screen is captured unless your request needs it, and captures leave out Ambient's own windows.</p></div></li>
+        <li><span>2</span><div><h3>Speech is recognised on the Mac when it can be.</h3><p>Apple's on-device recognizer handles most recordings, and the audio file is deleted when the turn ends.</p></div></li>
+        <li><span>3</span><div><h3>Memory is files you can read.</h3><p>What Ambient learns lives as plain files on your computer. Open them, edit them, delete them.</p></div></li>
+        <li><span>4</span><div><h3>The code is public.</h3><p>Ambient is MIT licensed. Read every line on GitHub.</p></div></li>
+      </ol>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Ambient · MIT licensed · forked from <a class="textlink" href="https://github.com/farzaa/clicky">Clicky</a></span>
+    <nav aria-label="Footer">
+      <a href="https://github.com/jibberswrld/ambient">GitHub</a>
+      <a href="https://github.com/jibberswrld/ambient/releases">Releases</a>
+      <a href="https://publikhq.com/ambient">publik</a>
+      <a href="#download">Download</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const REPO = "jibberswrld/ambient";
+
+  /* ---------- platform ---------- */
+  const platformString = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || navigator.userAgent;
+  const isMac = /mac/i.test(platformString) && !/iphone|ipad/i.test(navigator.userAgent);
+  const isWindows = /win/i.test(platformString);
+  const isTouch = matchMedia("(hover: none)").matches;
+  const downloadIcon = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3v10m0 0-4-4m4 4 4-4M4 16h12"/></svg>';
+  const primary = $("primary-cta"), secondary = $("secondary-cta");
+  if (isMac) {
+    primary.innerHTML = downloadIcon + "Download for Mac";
+    primary.href = $("mac-dl").href;
+    secondary.textContent = "Windows";
+    secondary.href = "#windows";
+  } else if (isWindows) {
+    primary.innerHTML = downloadIcon + "Get it for Windows";
+    primary.href = "#windows";
+    secondary.textContent = "Mac";
+    secondary.href = "#mac";
+    $("k1").textContent = "Ctrl"; $("k2").textContent = "Alt";
+  } else {
+    primary.innerHTML = downloadIcon + "Download";
+    secondary.textContent = "View on GitHub";
+    secondary.href = "https://github.com/" + REPO;
+  }
+  if (isTouch) { $("try-alt").textContent = ""; document.querySelector(".keys").innerHTML = "<span>Try it here: press and hold the bar</span>"; }
+
+  document.querySelectorAll('a[href="#windows"],a[href="#mac"]').forEach((link) => link.addEventListener("click", () => {
+    const panel = document.querySelector(link.getAttribute("href"));
+    panel.classList.add("hl"); setTimeout(() => panel.classList.remove("hl"), 1600);
+  }));
+
+  /* ---------- release info, fetched live ---------- */
+  const mb = (bytes) => (bytes / 1048576).toFixed(1) + " MB";
+  fetch("https://api.github.com/repos/" + REPO + "/releases?per_page=20", { headers: { Accept: "application/vnd.github+json" } })
+    .then((response) => response.ok ? response.json() : Promise.reject(response.status))
+    .then((releases) => {
+      const published = releases.filter((release) => !release.draft && !release.prerelease);
+      const find = (test) => { for (const release of published) { const asset = release.assets.find((a) => test(a.name)); if (asset) return { release, asset }; } return null; };
+      const mac = find((name) => name === "Ambient-macos.dmg");
+      const win = find((name) => /_x64-setup\.exe$/.test(name));
+      if (mac) { $("mac-dl").href = mac.asset.browser_download_url; if (isMac) primary.href = mac.asset.browser_download_url; document.querySelector("[data-mac-size]").textContent = mb(mac.asset.size); }
+      if (win) { $("win-dl").href = win.asset.browser_download_url; document.querySelector("[data-win-size]").textContent = mb(win.asset.size); }
+      const latest = published[0];
+      if (latest) {
+        const version = latest.tag_name.replace(/^v/, "");
+        const date = new Date(latest.published_at).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
+        $("release-line").textContent = "Version " + version + ", released " + date;
+        document.querySelector("[data-version]").textContent = "Version " + version;
+      }
+    })
+    .catch(() => {});
+
+  /* ---------- copy ---------- */
+  $("copy").addEventListener("click", async () => {
+    const command = "irm https://raw.githubusercontent.com/jibberswrld/ambient/main/windows/install.ps1 | iex";
+    const label = $("copy").querySelector("span");
+    try { await navigator.clipboard.writeText(command); label.textContent = "Copied"; }
+    catch { const range = document.createRange(); range.selectNodeContents($("ps-cmd")); getSelection().removeAllRanges(); getSelection().addRange(range); label.textContent = "Selected"; }
+    setTimeout(() => (label.textContent = "Copy"), 1800);
+  });
+
+  /* ---------- nav hairline ---------- */
+  const nav = $("nav");
+  addEventListener("scroll", () => nav.classList.toggle("scrolled", scrollY > 8), { passive: true });
+
+  /* ---------- the bar demo ---------- */
+  const bar = $("bar"), waveform = $("wv"), heard = $("heard"), reply = $("reply"), replyText = $("reply-text");
+  const task = $("task"), mark = $("mark"), markCap = $("mark-cap"), stage = $("stage");
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const BAR_COUNT = 15;
+  for (let index = 0; index < BAR_COUNT; index++) { const tick = document.createElement("i"); tick.style.setProperty("--n", Math.abs(index - 7)); waveform.appendChild(tick); }
+  const ticks = [...waveform.children];
+  const restingTicks = () => ticks.forEach((tick, index) => { tick.style.height = ""; tick.style.display = index < 5 || index > 9 ? "none" : ""; });
+  const allTicks = () => ticks.forEach((tick) => { tick.style.display = ""; tick.style.height = ""; });
+  restingTicks();
+
+  const clock = () => { const now = new Date(); $("clock").textContent = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); };
+  clock(); setInterval(clock, 30000);
+
+  const scripts = [
+    { ask: "Where's the export button in this app?", answer: "Top right, <b>next to Share</b>. I've circled it for you.", effect: "circle" },
+    { ask: "Start an agent to tidy up my Downloads folder.", answer: "On it. It's running <b>in the background</b>, and I'll tell you when it's done.", effect: "task" },
+    { ask: "How long do I boil an egg for a jammy yolk?", answer: "<b>Six and a half minutes</b> from a rolling boil, then straight into ice water.", effect: null },
+  ];
+  let scriptIndex = 0, runId = 0, userEngaged = false, holding = false, holdStart = 0, levelTimer = null, taskTimer = null;
+  const wait = (ms, id) => new Promise((resolve, reject) => setTimeout(() => (id === runId ? resolve() : reject("cancelled")), ms));
+
+  function setState(state) {
+    bar.dataset.state = state;
+    if (state === "resting" || state === "responding") restingTicks(); else allTicks();
+    clearInterval(levelTimer);
+    if (state === "listening") {
+      let phase = 0;
+      levelTimer = setInterval(() => {
+        phase += 0.35;
+        ticks.forEach((tick, index) => {
+          const center = 1 - Math.abs(index - 7) / 8;
+          const level = reduceMotion ? 0.5 : (0.35 + 0.65 * Math.abs(Math.sin(phase + index * 0.55))) * (0.55 + Math.random() * 0.45);
+          tick.style.height = Math.max(4, Math.round(4 + 26 * center * level)) + "px";
+        });
+      }, 90);
+    }
+  }
+  function clearScene() {
+    reply.classList.remove("on"); heard.classList.remove("on", "nudge");
+    mark.classList.remove("on"); markCap.classList.remove("on");
+  }
+  function placeCircle() {
+    const target = $("export-btn").getBoundingClientRect(), box = stage.getBoundingClientRect();
+    const padX = 14, padY = 10;
+    const x = target.left - box.left - padX, y = target.top - box.top - padY, width = target.width + padX * 2, height = target.height + padY * 2;
+    Object.assign(mark.style, { left: x + "px", top: y + "px", width: width + "px", height: height + "px" });
+    mark.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    const ellipse = $("mark-ellipse");
+    ellipse.setAttribute("cx", width / 2); ellipse.setAttribute("cy", height / 2);
+    ellipse.setAttribute("rx", width / 2 - 3); ellipse.setAttribute("ry", height / 2 - 3);
+    Object.assign(markCap.style, { left: Math.min(x + width - 60, box.width - 110) + "px", top: y + height + 6 + "px" });
+  }
+  function startTaskClock() {
+    let seconds = 0; clearInterval(taskTimer); $("task-time").textContent = "0:00";
+    taskTimer = setInterval(() => { seconds++; $("task-time").textContent = Math.floor(seconds / 60) + ":" + String(seconds % 60).padStart(2, "0"); }, 1000);
+  }
+  async function typeInto(element, html, id, msPerWord) {
+    const words = html.split(" "); element.innerHTML = "";
+    for (let index = 0; index < words.length; index++) {
+      element.innerHTML = words.slice(0, index + 1).join(" ");
+      if (!reduceMotion) await wait(msPerWord, id);
+    }
+  }
+  async function answer(script, id) {
+    setState("thinking");
+    await wait(850, id);
+    heard.classList.remove("on");
+    setState("responding");
+    $("reply-steps").textContent = script.effect ? "2 steps" : "1 step";
+    replyText.innerHTML = ""; reply.classList.add("on");
+    if (script.effect === "circle") { placeCircle(); mark.classList.add("on"); setTimeout(() => id === runId && markCap.classList.add("on"), 450); }
+    if (script.effect === "task") { task.classList.add("on"); startTaskClock(); }
+    // Words arrive the way Ambient reveals them: in step with the spoken sentence.
+    await typeInto(replyText, script.answer, id, 95);
+    await wait(3400, id);
+    clearScene(); setState("resting");
+  }
+  async function autoplay() {
+    const id = ++runId;
+    try {
+      await wait(900, id);
+      while (!userEngaged) {
+        const script = scripts[scriptIndex++ % scripts.length];
+        clearScene(); task.classList.remove("on");
+        setState("listening");
+        heard.textContent = ""; heard.classList.add("on");
+        const words = script.ask.split(" ");
+        for (let index = 0; index < words.length; index++) { heard.textContent = words.slice(0, index + 1).join(" "); await wait(reduceMotion ? 0 : 170, id); }
+        await wait(500, id);
+        await answer(script, id);
+        await wait(1400, id);
+      }
+    } catch (_) {}
+  }
+
+  // A hold from the keyboard or the pointer drives the same path the real bar uses.
+  async function beginHold() {
+    if (holding) return;
+    holding = true; userEngaged = true; holdStart = performance.now();
+    const id = ++runId;
+    clearScene(); task.classList.remove("on"); clearInterval(taskTimer);
+    setState("listening");
+    const script = scripts[scriptIndex % scripts.length];
+    heard.classList.add("on"); heard.textContent = "Listening…";
+    const words = script.ask.split(" ");
+    try {
+      await wait(350, id);
+      for (let index = 0; index < words.length && holding; index++) { heard.textContent = words.slice(0, index + 1).join(" "); await wait(150, id); }
+    } catch (_) {}
+  }
+  async function endHold() {
+    if (!holding) return;
+    holding = false;
+    const id = ++runId;
+    const heldFor = performance.now() - holdStart;
+    try {
+      if (heldFor < 450) {
+        setState("resting");
+        heard.classList.add("on", "nudge"); heard.textContent = "Keep holding while you talk, then let go.";
+        await wait(2200, id); heard.classList.remove("on", "nudge"); return;
+      }
+      const script = scripts[scriptIndex++ % scripts.length];
+      heard.textContent = script.ask;
+      await answer(script, id);
+    } catch (_) {}
+  }
+
+  const keyDown = new Set();
+  const paint = () => { $("k1").classList.toggle("down", keyDown.has("Control")); $("k2").classList.toggle("down", keyDown.has("Alt")); };
+  addEventListener("keydown", (event) => {
+    if (event.key !== "Control" && event.key !== "Alt") return;
+    keyDown.add(event.key); paint();
+    if (keyDown.has("Control") && keyDown.has("Alt") && !event.metaKey && !event.shiftKey) { event.preventDefault(); beginHold(); }
+  });
+  addEventListener("keyup", (event) => {
+    if (event.key !== "Control" && event.key !== "Alt") return;
+    keyDown.delete(event.key); paint(); endHold();
+  });
+  addEventListener("blur", () => { keyDown.clear(); paint(); endHold(); });
+  bar.addEventListener("pointerdown", (event) => { event.preventDefault(); bar.setPointerCapture(event.pointerId); beginHold(); });
+  bar.addEventListener("pointerup", endHold);
+  bar.addEventListener("pointercancel", endHold);
+  bar.addEventListener("contextmenu", (event) => event.preventDefault());
+  bar.addEventListener("keydown", (event) => { if ((event.key === " " || event.key === "Enter") && !event.repeat) { event.preventDefault(); beginHold(); } });
+  bar.addEventListener("keyup", (event) => { if (event.key === " " || event.key === "Enter") endHold(); });
+  addEventListener("resize", () => { if (mark.classList.contains("on")) placeCircle(); });
+
+  // Only play the demo while it is on screen.
+  new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (entry.isIntersecting && !userEngaged && !holding) autoplay();
+      else if (!entry.isIntersecting && !holding) { runId++; clearScene(); setState("resting"); }
+    });
+  }, { threshold: 0.35 }).observe(stage);
+})();
+</script>
+</body>
+</html>
