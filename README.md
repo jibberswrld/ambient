@@ -23,6 +23,16 @@ It is a native macOS app (Swift, SwiftUI and AppKit), forked from [Clicky](https
 
 Ambient asks for Microphone, Accessibility (for the global shortcut) and Screen Recording (only used when you ask about your screen). Speech Recognition is optional.
 
+## Windows
+
+Ambient also runs on Windows 10 and 11 (`windows/`). Install it by pasting this into PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/jibberswrld/ambient/main/windows/install.ps1 | iex
+```
+
+It downloads the latest installer from this repository's releases, installs it for your user (no administrator prompt) and opens Ambient. You can also download `Ambient_<version>_x64-setup.exe` from a release yourself. That installer is not code signed yet, so Windows shows "Windows protected your PC" the first time: click **More info**, then **Run anyway**. That warning is about the missing certificate, not a detection; every build is made from this repository by GitHub Actions and is scanned by Microsoft Defender, and run under it, before it ships.
+
 ## Build from source
 
 Requires Xcode and a Developer ID Application signing identity.

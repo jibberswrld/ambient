@@ -1,0 +1,263 @@
+/* The gallery page itself: a quiet neutral sheet so the tiles are what you see. */
+
+html[data-window='gallery'] body {
+  margin: 0;
+  background: rgb(236 234 231);
+  color: rgb(28 26 24);
+}
+
+.gallery {
+  padding: 32px 36px 80px;
+}
+.gallery-header h1 {
+  margin: 0 0 4px;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.4px;
+}
+.gallery-header p {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: rgb(28 26 24 / 0.6);
+}
+.gallery-section {
+  padding-top: 28px;
+}
+.gallery-section > h2 {
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: rgb(28 26 24 / 0.55);
+}
+.gallery-grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.gallery-tile {
+  position: relative;
+  margin: 0;
+  overflow: hidden;
+  border-radius: 10px;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.08);
+}
+.gallery-tile figcaption {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: rgb(0 0 0 / 0.38);
+  color: rgb(255 255 255 / 0.85);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  pointer-events: none;
+}
+
+/* A Windows desktop ------------------------------------------------------------------------------------------------ */
+
+.desktop-backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.desktop-backdrop.tone-dark {
+  background:
+    radial-gradient(70% 60% at 100% 100%, rgb(104 72 140 / 0.55), transparent 70%),
+    linear-gradient(140deg, rgb(58 46 82), rgb(30 27 42) 55%, rgb(40 31 56));
+}
+.desktop-backdrop.tone-light {
+  background:
+    radial-gradient(80% 70% at 0% 0%, rgb(214 220 240), transparent 70%),
+    radial-gradient(80% 80% at 100% 100%, rgb(244 220 200), transparent 70%),
+    rgb(240 233 228);
+}
+.desktop-document {
+  position: absolute;
+  top: 34px;
+  width: 300px;
+  bottom: 70px;
+  overflow: hidden;
+  border-radius: 8px;
+  padding: 0 18px;
+}
+.desktop-document.position-centre {
+  left: 50%;
+  translate: -50% 0;
+  width: 360px;
+}
+.desktop-document.position-left {
+  left: 40px;
+}
+.tone-dark .desktop-document {
+  background: rgb(38 37 38);
+  color: rgb(255 255 255 / 0.5);
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.07),
+    0 18px 40px rgb(0 0 0 / 0.35);
+}
+.tone-light .desktop-document {
+  background: rgb(255 255 255);
+  color: rgb(0 0 0 / 0.62);
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.06),
+    0 18px 40px rgb(80 60 40 / 0.14);
+}
+.desktop-document-caption {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 30px;
+  margin: 0 -18px;
+  padding: 0 12px;
+  font-size: 11px;
+  opacity: 0.75;
+}
+.desktop-document-caption-buttons {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+.desktop-document h3 {
+  margin: 10px 0 8px;
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 600;
+}
+.tone-dark .desktop-document h3 {
+  color: rgb(255 255 255 / 0.9);
+}
+.tone-light .desktop-document h3 {
+  color: rgb(0 0 0 / 0.86);
+}
+.desktop-document p {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+.desktop-taskbar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.tone-dark .desktop-taskbar {
+  background: rgb(28 28 32 / 0.92);
+  box-shadow: 0 -1px 0 rgb(255 255 255 / 0.06);
+}
+.tone-light .desktop-taskbar {
+  background: rgb(243 243 243 / 0.94);
+  box-shadow: 0 -1px 0 rgb(0 0 0 / 0.06);
+}
+.desktop-taskbar-start,
+.desktop-taskbar-app {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+}
+.desktop-taskbar-start {
+  background: linear-gradient(135deg, rgb(64 150 240), rgb(30 100 210));
+}
+.tone-dark .desktop-taskbar-app {
+  background: rgb(255 255 255 / 0.14);
+}
+.tone-light .desktop-taskbar-app {
+  background: rgb(0 0 0 / 0.1);
+}
+.desktop-taskbar-app.is-open {
+  box-shadow: 0 6px 0 -4px rgb(64 150 240);
+}
+
+/* Bar tiles ----------------------------------------------------------------------------------------------------- */
+
+.bar-tile {
+  width: 460px;
+  height: 230px;
+}
+.bar-tile.is-card {
+  height: 560px;
+}
+.bar-tile.edge-left {
+  height: 330px;
+}
+.bar-tile.edge-left.is-card {
+  height: 560px;
+}
+/* The work area: everything above the taskbar, where the bar docks. */
+.bar-tile-work-area {
+  position: absolute;
+  inset: 0 0 40px 0;
+}
+
+/* Window frames -------------------------------------------------------------------------------------------------- */
+
+.window-frame {
+  border-radius: 8px;
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.14),
+    0 10px 30px rgb(0 0 0 / 0.12);
+}
+.window-frame-caption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 32px;
+  padding: 0 0 0 14px;
+  font-size: 12px;
+}
+.window-frame.appearance-light .window-frame-caption {
+  background: rgb(236 233 229);
+  color: rgb(0 0 0 / 0.8);
+}
+.window-frame.appearance-dark .window-frame-caption {
+  background: rgb(27 25 24);
+  color: rgb(255 255 255 / 0.82);
+}
+.window-frame-caption-buttons {
+  display: flex;
+  align-self: stretch;
+}
+.window-frame-caption-buttons svg {
+  box-sizing: content-box;
+  padding: 0 17px;
+  align-self: center;
+}
+.window-frame-content {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Tour tiles ---------------------------------------------------------------------------------------------------- */
+
+.tour-tile {
+  width: 620px;
+  height: 600px;
+}
+.tour-tile-corner {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+}
+
+/* Overlay tiles ------------------------------------------------------------------------------------------------- */
+
+.overlay-tile {
+  width: 900px;
+  height: 560px;
+}
+.overlay-tile.tone-dark {
+  background: rgb(34 34 34);
+}
+.overlay-tile.tone-light {
+  background: rgb(247 247 246);
+}

@@ -1,0 +1,216 @@
+/* The overlay: nothing here ever takes a click (the window is click-through as well). */
+
+.overlay-window {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.annotation-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.annotation-strokes {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+
+/* Each stroke draws itself from start to end with pathLength=1, in order, as if drawn by hand. */
+.annotation-stroke {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1 1;
+  stroke-dashoffset: 1;
+  animation: annotation-stroke-draw var(--stroke-duration) cubic-bezier(0.45, 0, 0.25, 1) var(--annotation-delay) forwards;
+}
+@keyframes annotation-stroke-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+/* The fill washes in as the outline closes. */
+.annotation-fill {
+  fill-opacity: 0.3;
+  opacity: 0;
+  animation: annotation-fade-in 300ms ease-out calc(var(--annotation-delay) + var(--stroke-duration) * 0.8) forwards;
+}
+@keyframes annotation-fade-in {
+  to {
+    opacity: 1;
+  }
+}
+
+/* A caption on the same smoked glass as the bar, with its step number in an ember disc. */
+.annotation-caption {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+  padding: 0 11px;
+  border-radius: 14px;
+  translate: -50% -50%;
+  white-space: nowrap;
+  opacity: 0;
+  animation: annotation-caption-in 300ms var(--ease-out-strong) var(--annotation-delay) forwards;
+}
+.annotation-caption:has(.annotation-step-number) {
+  padding-left: 5px;
+}
+@keyframes annotation-caption-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.annotation-step-number {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--ember);
+  color: var(--ember-ink);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.annotation-caption-text {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--on-smoke-primary);
+}
+
+.annotation-overlay.is-static .annotation-stroke,
+.annotation-overlay.is-static .annotation-fill,
+.annotation-overlay.is-static .annotation-caption,
+.is-still-capture .annotation-stroke,
+.is-still-capture .annotation-fill,
+.is-still-capture .annotation-caption {
+  animation: none;
+  stroke-dashoffset: 0;
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .annotation-stroke,
+  .annotation-fill,
+  .annotation-caption {
+    animation-duration: 180ms;
+    animation-delay: 0s;
+  }
+}
+
+/* Pointer ------------------------------------------------------------------------------------------------------- */
+
+.pointer-view {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+}
+.pointer-view > span:not(.pointer-label) {
+  grid-area: 1 / 1;
+  border-radius: 50%;
+}
+.pointer-halo {
+  width: 44px;
+  height: 44px;
+  background: radial-gradient(circle, rgb(255 149 74 / 0.3) 9%, rgb(255 149 74 / 0) 70%);
+  animation: pointer-halo-breath 1.8s ease-in-out 0.34s infinite;
+}
+@keyframes pointer-halo-breath {
+  0%,
+  100% {
+    opacity: 0.75;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+/* The lock-on ring closes from wide and faint to tight and bright as the ember lands. */
+.pointer-ring,
+.pointer-ring-shadow {
+  animation: pointer-ring-close 340ms var(--ease-out-strong) both;
+}
+.pointer-ring {
+  width: 26px;
+  height: 26px;
+  box-shadow: inset 0 0 0 1.5px rgb(255 149 74 / 0.95);
+}
+.pointer-ring-shadow {
+  width: 28.5px;
+  height: 28.5px;
+  box-shadow: inset 0 0 0 0.75px rgb(0 0 0 / 0.35);
+}
+@keyframes pointer-ring-close {
+  from {
+    opacity: 0;
+    transform: scale(1.7);
+  }
+}
+/* The ember: a hot core with a crisp dark rim so it reads on white pages as well as dark ones. */
+.pointer-core {
+  width: 11px;
+  height: 11px;
+  background: radial-gradient(circle, var(--ember-core), var(--ember) 80%);
+  box-shadow:
+    inset 0 0 0 0.75px rgb(0 0 0 / 0.35),
+    0 0 8px rgb(255 149 74 / 0.9);
+}
+/* The label rises out of the point toward its side. */
+.pointer-label {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 13px;
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  animation: pointer-label-in 300ms var(--ease-out-strong) 120ms both;
+}
+.placement-trailingBelow .pointer-label {
+  left: calc(100% + 10px - 22px);
+  top: calc(100% + 9px - 22px);
+}
+.placement-trailingAbove .pointer-label {
+  left: calc(100% + 10px - 22px);
+  bottom: calc(100% + 9px - 22px);
+}
+.placement-leadingBelow .pointer-label {
+  right: calc(100% + 10px - 22px);
+  top: calc(100% + 9px - 22px);
+}
+.placement-leadingAbove .pointer-label {
+  right: calc(100% + 10px - 22px);
+  bottom: calc(100% + 9px - 22px);
+}
+@keyframes pointer-label-in {
+  from {
+    opacity: 0;
+    transform: translate(-6px, -4px) scale(0.96);
+  }
+}
+.is-still-capture .pointer-view * {
+  animation: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pointer-view * {
+    animation-duration: 180ms !important;
+    animation-iteration-count: 1 !important;
+  }
+  .pointer-ring,
+  .pointer-ring-shadow,
+  .pointer-label {
+    animation-name: annotation-fade-in !important;
+  }
+}

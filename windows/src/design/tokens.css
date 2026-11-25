@@ -1,0 +1,211 @@
+/*
+  AMBIENT DESIGN DIRECTION (ported from AmbientDesign.swift)
+
+  Material: one piece of dense, warm smoked glass with a lit rim, always dark so it reads as one crisp object on white
+  pages and dark desktops alike. On Windows nothing is blurred behind the bar's transparent window, so the glass is a
+  high-opacity warm graphite on its own, with a faint sheen at the top instead of a blur.
+  Accent: a single ember orange that means "Ambient is paying attention" or "the one primary action", never decoration.
+  Type: Segoe UI Variable at small, confident sizes, tight tracking on titles, tabular figures for anything that counts.
+  Motion: critically damped springs for size changes (CSS linear() approximations of the Mac springs); the only bounce
+  is the bar landing after a throw. prefers-reduced-motion swaps them for short fades.
+*/
+
+:root {
+  --font-text: 'Segoe UI Variable Text', 'Segoe UI Variable', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  --font-display: 'Segoe UI Variable Display', 'Segoe UI Variable', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+  --font-mono: 'Cascadia Mono', 'Cascadia Code', Consolas, ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* The one accent. */
+  --ember: rgb(255 149 74);
+  /* The hot centre of the ember, for the core of indicators. */
+  --ember-core: rgb(255 212 168);
+  /* Ember dark enough to read as text on light window surfaces. */
+  --ember-deep: rgb(204 92 26);
+  /* Text drawn on an ember fill. */
+  --ember-ink: rgb(41 18 3);
+  /* Errors. Desaturated so it never competes with the ember. */
+  --alert: rgb(255 122 117);
+  --alert-deep: rgb(199 51 51);
+
+  /* Text and fills on smoked glass: always light-on-dark because the glass is always smoked. */
+  --on-smoke-primary: rgb(255 255 255 / 0.95);
+  --on-smoke-secondary: rgb(255 255 255 / 0.64);
+  --on-smoke-tertiary: rgb(255 255 255 / 0.42);
+  --on-smoke-hairline: rgb(255 255 255 / 0.10);
+  --on-smoke-fill: rgb(255 255 255 / 0.07);
+  --on-smoke-fill-hover: rgb(255 255 255 / 0.13);
+  --on-smoke-fill-pressed: rgb(255 255 255 / 0.18);
+
+  /* The glass. Pills are a touch thinner than cards, which carry paragraphs. */
+  --glass-pill-fill: rgb(21 19 18 / 0.96);
+  --glass-card-fill: rgb(18 17 16 / 0.99);
+  --glass-sheen: linear-gradient(180deg, rgb(255 244 232 / 0.055), rgb(255 244 232 / 0) 55%);
+  --glass-rim-pill: linear-gradient(180deg, rgb(255 255 255 / 0.30), rgb(255 255 255 / 0.11));
+  --glass-rim-card: linear-gradient(180deg, rgb(255 255 255 / 0.19), rgb(255 255 255 / 0.06));
+  /* Layered, low-alpha shadows that fit inside the bar window's 20 px margin. */
+  --glass-pill-shadow: 0 1px 1.5px rgb(0 0 0 / 0.28), 0 3px 9px rgb(0 0 0 / 0.20);
+  --glass-card-shadow: 0 1px 2px rgb(0 0 0 / 0.24), 0 6px 14px rgb(0 0 0 / 0.20), 0 12px 24px -8px rgb(0 0 0 / 0.22);
+
+  --radius-card: 22px;
+  --radius-nested: 10px;
+  --pill-thickness: 36px;
+
+  /* Motion. Spring curves are sampled from the Mac's SwiftUI springs (response, damping). */
+  --spring-surface-morph: linear(0, 0.0208, 0.0732, 0.1452, 0.2278, 0.3142, 0.4, 0.482, 0.5582, 0.6274, 0.6892, 0.7435, 0.7906, 0.8309, 0.865, 0.8935, 0.9171, 0.9365, 0.9522, 0.9648, 0.9747, 0.9825, 0.9885, 0.993, 0.9964, 0.9988, 1.0005, 1.0017, 1.0024, 1.0028, 1.003, 1.0029, 1.0028, 1.0026, 1.0024, 1.0021, 1.0019, 1.0016, 1.0014, 1.0012, 1);
+  --spring-surface-morph-duration: 580ms;
+  --spring-dock-landing: linear(0, 0.0185, 0.0666, 0.1348, 0.2154, 0.3022, 0.3905, 0.4769, 0.5588, 0.6346, 0.7031, 0.7639, 0.8169, 0.8623, 0.9005, 0.9321, 0.9577, 0.978, 0.9937, 1.0055, 1.0139, 1.0197, 1.0232, 1.025, 1.0254, 1.0248, 1.0235, 1.0217, 1.0196, 1.0174, 1.0152, 1.013, 1.0109, 1.009, 1.0073, 1.0058, 1.0045, 1.0034, 1.0024, 1.0016, 1);
+  --spring-dock-landing-duration: 590ms;
+  --spring-content-swap: linear(0, 0.023, 0.0791, 0.1538, 0.2369, 0.3218, 0.4041, 0.4814, 0.5522, 0.6159, 0.6723, 0.7219, 0.7649, 0.8021, 0.8339, 0.861, 0.884, 0.9034, 0.9198, 0.9335, 0.945, 0.9546, 0.9625, 0.9691, 0.9746, 0.9791, 0.9829, 0.986, 0.9885, 0.9906, 0.9923, 0.9937, 0.9949, 0.9958, 0.9966, 0.9972, 0.9977, 0.9982, 0.9985, 0.9988, 1);
+  --spring-content-swap-duration: 380ms;
+  --spring-switch: linear(0, 0.0212, 0.075, 0.149, 0.234, 0.3232, 0.4117, 0.4961, 0.5745, 0.6454, 0.7085, 0.7636, 0.811, 0.8512, 0.8848, 0.9126, 0.9352, 0.9534, 0.9678, 0.979, 0.9875, 0.9939, 0.9986, 1.0018, 1.004, 1.0053, 1.006, 1.0063, 1.0062, 1.0059, 1.0054, 1.0049, 1.0044, 1.0038, 1.0033, 1.0028, 1.0023, 1.0019, 1.0016, 1.0012, 1);
+  --spring-switch-duration: 350ms;
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  --hover-duration: 120ms;
+  --press-duration: 100ms;
+
+  font-family: var(--font-text);
+  -webkit-font-smoothing: antialiased;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+/* Window surfaces (settings, activity) follow the system appearance. The root of each window sets one of these. */
+.appearance-light {
+  color-scheme: light;
+  --window-background: rgb(246 244 241);
+  --sidebar-background: rgb(236 233 229);
+  --card-background: rgb(255 255 255);
+  --card-hairline: rgb(28 22 16 / 0.085);
+  --row-hover: rgb(28 22 16 / 0.035);
+  --selected-row: rgb(28 22 16 / 0.07);
+  --quiet-fill: rgb(28 22 16 / 0.05);
+  --primary-text: rgb(22 20 18);
+  --secondary-text: rgb(22 20 18 / 0.62);
+  --tertiary-text: rgb(22 20 18 / 0.42);
+  --accent-text: rgb(196 88 24);
+  --focus-ring: rgb(204 92 26 / 0.55);
+}
+
+.appearance-dark {
+  color-scheme: dark;
+  --window-background: rgb(20 19 18);
+  --sidebar-background: rgb(27 25 24);
+  --card-background: rgb(34 32 31);
+  --card-hairline: rgb(255 248 240 / 0.075);
+  --row-hover: rgb(255 248 240 / 0.045);
+  --selected-row: rgb(255 248 240 / 0.085);
+  --quiet-fill: rgb(255 248 240 / 0.07);
+  --primary-text: rgb(246 244 241);
+  --secondary-text: rgb(246 244 241 / 0.6);
+  --tertiary-text: rgb(246 244 241 / 0.4);
+  --accent-text: rgb(255 158 92);
+  --focus-ring: rgb(255 149 74 / 0.6);
+}
+
+/* Increase contrast (prefers-contrast: more, or the gallery forcing it): solid glass, brighter rim, firmer text. */
+.contrast-more {
+  --glass-pill-fill: rgb(10 10 10);
+  --glass-card-fill: rgb(10 10 10);
+  --glass-sheen: none;
+  --glass-rim-pill: linear-gradient(180deg, rgb(255 255 255 / 0.6), rgb(255 255 255 / 0.4));
+  --glass-rim-card: linear-gradient(180deg, rgb(255 255 255 / 0.6), rgb(255 255 255 / 0.4));
+  --on-smoke-secondary: rgb(255 255 255 / 0.8);
+  --on-smoke-tertiary: rgb(255 255 255 / 0.66);
+  --on-smoke-hairline: rgb(255 255 255 / 0.28);
+}
+.contrast-more.appearance-light {
+  --card-hairline: rgb(0 0 0 / 0.35);
+  --secondary-text: rgb(22 20 18 / 0.8);
+  --tertiary-text: rgb(22 20 18 / 0.66);
+}
+.contrast-more.appearance-dark {
+  --card-hairline: rgb(255 255 255 / 0.35);
+  --secondary-text: rgb(246 244 241 / 0.82);
+  --tertiary-text: rgb(246 244 241 / 0.68);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  margin: 0;
+}
+
+/* Keyboard focus is always visible; pointer focus never draws a ring. */
+:focus {
+  outline: none;
+}
+:focus-visible {
+  outline: 2px solid var(--focus-ring, rgb(255 149 74 / 0.7));
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------------------------------------------------------- */
+/* Smoked glass                                                                                                      */
+/* ---------------------------------------------------------------------------------------------------------------- */
+
+.smoked-glass {
+  position: relative;
+  background: var(--glass-sheen), var(--glass-pill-fill);
+  box-shadow: var(--glass-pill-shadow);
+  color: var(--on-smoke-primary);
+  color-scheme: dark;
+}
+.smoked-glass.is-raised-card {
+  background: var(--glass-sheen), var(--glass-card-fill);
+  box-shadow: var(--glass-card-shadow);
+}
+/* The rim: a stroke of light along the edge, brighter at the top, like the lit edge of glass. */
+.smoked-glass::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--glass-rim-pill);
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  pointer-events: none;
+}
+.smoked-glass.is-raised-card::after {
+  background: var(--glass-rim-card);
+}
+
+/* ---------------------------------------------------------------------------------------------------------------- */
+/* Windows High Contrast (forced colors): let the system palette win, but keep every surface outlined.               */
+/* ---------------------------------------------------------------------------------------------------------------- */
+
+@media (forced-colors: active) {
+  .smoked-glass {
+    background: Canvas;
+    border: 1px solid CanvasText;
+    box-shadow: none;
+  }
+  .smoked-glass::after {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --spring-surface-morph: ease-in-out;
+    --spring-surface-morph-duration: 180ms;
+    --spring-dock-landing: ease-in-out;
+    --spring-dock-landing-duration: 200ms;
+    --spring-content-swap: ease-in-out;
+    --spring-content-swap-duration: 150ms;
+    --spring-switch: ease-in-out;
+    --spring-switch-duration: 120ms;
+  }
+}

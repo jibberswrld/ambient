@@ -1,0 +1,104 @@
+# Builds and tests Ambient for Windows on a real Windows machine. Nothing here publishes a release.
+name: Windows
+
+on:
+  push:
+    branches: [feature/windows]
+    paths: ["windows/**", ".github/workflows/windows.yml"]
+  pull_request:
+    paths: ["windows/**", ".github/workflows/windows.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: windows
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: windows
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Test the Rust crates on Windows
+        run: cargo test --workspace --no-fail-fast
+
+      - name: Test and build the interface
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm typecheck
+          pnpm test
+
+      # Signed for the updater when the key is available (pushes to this repository); pull requests from forks build unsigned.
+      - name: Build the installer
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.PUBLIK_UPDATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.PUBLIK_UPDATE_KEY_PASSWORD }}
+        run: |
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            pnpm tauri build
+          else
+            pnpm tauri build --config '{"bundle":{"createUpdaterArtifacts":false}}'
+          fi
+
+      - name: Scan the app and installer with Microsoft Defender
+        run: ./ci/scan.ps1 -Paths "target\release\ambient.exe","target\release\bundle\nsis\*.exe" -EvidenceDirectory "${{ runner.temp }}\evidence"
+
+      - name: Prove screen capture works on Windows
+        run: cargo run --release -p ambient-platform --example capture -- "${{ runner.temp }}\evidence\captures"
+
+      # Through the same install.ps1 users pipe into Windows PowerShell 5.1, downloading the installer over HTTP.
+      - name: Install it the way a user would
+        run: |
+          $setup = Get-ChildItem "target\release\bundle\nsis\*-setup.exe" | Select-Object -First 1
+          $server = Start-Process python -ArgumentList "-m","http.server","4556","--directory",$setup.DirectoryName -PassThru -NoNewWindow
+          Start-Sleep -Seconds 2
+          $env:AMBIENT_SETUP_URL = "http://127.0.0.1:4556/$($setup.Name)"
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Get-Content -Raw .\install.ps1 | Invoke-Expression"
+          if ($LASTEXITCODE -ne 0) { throw "install.ps1 failed" }
+          Stop-Process -Id $server.Id -Force
+          # install.ps1 opens Ambient; close it so the smoke run starts its own copy against the mock.
+          Start-Sleep -Seconds 3
+          Get-Process ambient -ErrorAction SilentlyContinue | Stop-Process -Force
+          $installed = Join-Path $env:LOCALAPPDATA "Ambient\ambient.exe"
+          "AMBIENT_INSTALLED=$installed" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Run the installed app end to end against a mock publik
+        run: ./ci/smoke.ps1 -AmbientExecutable "$env:AMBIENT_INSTALLED" -EvidenceDirectory "${{ runner.temp }}\evidence"
+
+      - name: Fail if Defender flagged anything while Ambient installed and ran
+        if: always()
+        run: |
+          $detections = @(Get-MpThreatDetection)
+          $report = "${{ runner.temp }}\evidence\defender-scan.txt"
+          "`n== Live detections after install and run: $($detections.Count)" | Tee-Object -FilePath $report -Append
+          $detections | Format-List * | Out-String | Tee-Object -FilePath $report -Append
+          if ($detections.Count -gt 0) { throw "Defender flagged something while Ambient was installed or running" }
+
+      - name: Keep the evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-evidence
+          path: ${{ runner.temp }}/evidence
+          if-no-files-found: warn
+
+      - name: Keep the installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ambient-windows-installer
+          path: windows/target/release/bundle/nsis/*
