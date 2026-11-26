@@ -15,6 +15,30 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400..600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<script>
+!function(t,e){var o,n,p,r;e.__SV||(window.posthog&&window.posthog.__loaded)||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey getNextSurveyStep identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty createPersonProfile opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+(function () {
+  // Phones get a "send it to your computer" hero instead of a download they can't use.
+  var ua = navigator.userAgent;
+  var phone = /iPhone|iPad|iPod|Android/i.test(ua) || (/Mac/.test(navigator.platform) && navigator.maxTouchPoints > 1);
+  window.ambientDevice = phone ? "phone" : "desktop";
+  var props = { device: window.ambientDevice };
+  var src = new URLSearchParams(location.search).get("src");
+  if (src) props.src = src.slice(0, 64);
+  // Memory persistence: no cookies or storage, so no consent banner. Pageviews only, plus the named events below.
+  posthog.init("phc_uUbhzyktostk57hnvmntXArEXWkrk78HpdvrcQQVbLvH", {
+    api_host: "https://us.i.posthog.com",
+    persistence: "memory",
+    autocapture: false,
+    disable_session_recording: true,
+    capture_heatmaps: false,
+    capture_dead_clicks: false,
+    disable_surveys: true,
+    person_profiles: "identified_only",
+    before_send: function (event) { if (event) Object.assign(event.properties, props); return event; },
+  });
+})();
+</script>
 <style>
 :root{
   /* every neutral carries the same warm hue */
@@ -31,6 +55,7 @@
   --wrap:1200px; --gutter:clamp(20px,4vw,48px);
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
 body{margin:0;background:var(--paper);color:var(--ink);font:450 15px/1.6 var(--sans);letter-spacing:.002em;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 a{color:inherit}
@@ -71,6 +96,18 @@ h1 em{font-style:italic;color:var(--ink-2)}
 .ctas{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
 .meta{margin-top:16px;font-size:13px;color:var(--ink-3)}
 .meta span+span::before{content:"·";margin:0 8px;color:var(--ink-4)}
+
+/* phones: Ambient installs on a computer, so send the link there */
+.send{scroll-margin-top:84px}
+.send-title{margin:0 0 14px;font:560 17px/1.35 var(--sans);letter-spacing:-.012em}
+.send-title span{display:block;font-weight:450;color:var(--ink-2)}
+.send-ctas{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.send-ctas .btn{justify-content:center;width:100%}
+.send-ctas .btn:first-child{grid-column:1/-1}
+.send-ctas .btn.solo{grid-column:1/-1}
+.phone-note{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 16px;padding:16px 18px;border-radius:12px;background:var(--card);box-shadow:0 0 0 1px var(--line);font-size:14px;color:var(--ink-2)}
+.phone-note p{margin:0}
+.phone-note .btn{flex:none}
 
 /* stage: the signature */
 .stage-wrap{margin-top:clamp(40px,6vw,72px)}
@@ -235,6 +272,7 @@ footer a:hover{color:var(--ink)}
   .task{right:50%;transform:translate(50%,6px);bottom:auto;top:40px}
   .task.on{transform:translate(50%,0)}
   .alt{flex-direction:column}
+  .phone-note{flex-direction:column;align-items:flex-start;gap:12px}
   .panel{padding:24px}
   .cmd-label span{display:none}
 }
@@ -268,7 +306,15 @@ footer a:hover{color:var(--ink)}
             <a class="btn" id="primary-cta" href="#download"></a>
             <a class="btn ghost" id="secondary-cta" href="#download"></a>
           </div>
-          <div class="meta"><span>Free download</span><span class="ver" data-version>Mac &amp; Windows</span><span>Open source</span></div>
+          <div class="send" id="send" hidden>
+            <p class="send-title">On your phone?<span>Send it to your computer.</span></p>
+            <div class="send-ctas">
+              <a class="btn" id="send-email" href="#"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4.5" width="15" height="11" rx="2"/><path d="m3.5 6 6.5 5 6.5-5"/></svg>Email me the link</a>
+              <button class="btn ghost" id="send-copy" type="button"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="2"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg><span aria-live="polite">Copy link</span></button>
+              <button class="btn ghost" id="send-share" type="button" hidden><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 12.5V3m0 0L6.5 6.5M10 3l3.5 3.5M6 9.5H5a1.5 1.5 0 0 0-1.5 1.5v5A1.5 1.5 0 0 0 5 17.5h10a1.5 1.5 0 0 0 1.5-1.5v-5A1.5 1.5 0 0 0 15 9.5h-1"/></svg>Share</button>
+            </div>
+          </div>
+          <div class="meta" id="hero-meta"><span>Free download</span><span class="ver" data-version>Mac &amp; Windows</span><span>Open source</span></div>
         </div>
       </div>
 
@@ -355,6 +401,11 @@ footer a:hover{color:var(--ink)}
         <p>Free to download. On first launch you sign in with <a class="textlink" href="https://publikhq.com/ambient">publik</a>, which provides the AI, speech and search.</p>
       </div>
 
+      <div class="phone-note" id="phone-note" hidden>
+        <p>These install on a computer, not a phone.</p>
+        <a class="btn sm" id="note-email" href="#">Email me the link</a>
+      </div>
+
       <div class="dl">
         <div class="panel" id="mac">
           <div class="panel-top">
@@ -434,7 +485,51 @@ footer a:hover{color:var(--ink)}
   const isTouch = matchMedia("(hover: none)").matches;
   const downloadIcon = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3v10m0 0-4-4m4 4 4-4M4 16h12"/></svg>';
   const primary = $("primary-cta"), secondary = $("secondary-cta");
-  if (isMac) {
+  const isPhone = window.ambientDevice === "phone";
+  const track = (event, properties) => { try { window.posthog.capture(event, properties, { send_instantly: true }); } catch (_) {} };
+  if (isPhone) {
+    // Ambient can't run here, so hand the link to the visitor's computer instead of offering a dead download.
+    const pageURL = location.origin + location.pathname;
+    const linkFor = (method) => pageURL + "?src=phone-" + method;
+    const mailto = "mailto:?subject=" + encodeURIComponent("Ambient for my computer") + "&body=" +
+      encodeURIComponent(linkFor("email") + "\n\nOpen this on your Mac or Windows PC and click Download.");
+    document.querySelector(".ctas").hidden = true;
+    $("hero-meta").innerHTML = "<span>Works on Mac and Windows PCs.</span>";
+    $("send").hidden = false;
+    $("phone-note").hidden = false;
+    [$("send-email"), $("note-email")].forEach((link) => {
+      link.href = mailto;
+      link.addEventListener("click", () => track("landing_send_to_computer", { method: "email" }));
+    });
+    const navCta = document.querySelector(".navlinks .btn");
+    navCta.textContent = "Send to computer"; navCta.href = "#send";
+
+    const copyButton = $("send-copy"), copyLabel = copyButton.querySelector("span"), copyIcon = copyButton.querySelector("svg"), copyIconHTML = copyIcon.innerHTML;
+    copyButton.addEventListener("click", async () => {
+      track("landing_send_to_computer", { method: "copy" });
+      const link = linkFor("copy");
+      try { await navigator.clipboard.writeText(link); }
+      catch {
+        // In-app browsers (Instagram) can refuse the async clipboard; fall back to a selected field.
+        const field = Object.assign(document.createElement("textarea"), { value: link, readOnly: true });
+        field.style.cssText = "position:fixed;opacity:0;top:0";
+        document.body.appendChild(field); field.select(); field.setSelectionRange(0, link.length);
+        try { document.execCommand("copy"); } finally { field.remove(); }
+      }
+      copyLabel.textContent = "Copied"; copyIcon.innerHTML = '<path d="m3 8.5 3 3 7-7" stroke-linecap="round" stroke-linejoin="round"/>';
+      setTimeout(() => { copyLabel.textContent = "Copy link"; copyIcon.innerHTML = copyIconHTML; }, 1800);
+    });
+
+    if (navigator.share) {
+      $("send-share").hidden = false;
+      $("send-share").addEventListener("click", () => {
+        track("landing_send_to_computer", { method: "share" });
+        navigator.share({ title: "Ambient", text: "Ambient, for my computer", url: linkFor("share") }).catch(() => {});
+      });
+    } else {
+      copyButton.classList.add("solo");
+    }
+  } else if (isMac) {
     primary.innerHTML = downloadIcon + "Download for Mac";
     primary.href = $("mac-dl").href;
     secondary.textContent = "Windows";
@@ -450,6 +545,9 @@ footer a:hover{color:var(--ink)}
     secondary.textContent = "View on GitHub";
     secondary.href = "https://github.com/" + REPO;
   }
+  $("mac-dl").addEventListener("click", () => track("landing_download_click", { os: "mac" }));
+  $("win-dl").addEventListener("click", () => track("landing_download_click", { os: "windows_exe" }));
+  primary.addEventListener("click", () => { if (primary.href === $("mac-dl").href) track("landing_download_click", { os: "mac" }); });
   if (isTouch) { $("try-alt").textContent = ""; document.querySelector(".keys").innerHTML = "<span>Try it here: press and hold the bar</span>"; }
 
   document.querySelectorAll('a[href="#windows"],a[href="#mac"]').forEach((link) => link.addEventListener("click", () => {
@@ -480,6 +578,7 @@ footer a:hover{color:var(--ink)}
 
   /* ---------- copy ---------- */
   $("copy").addEventListener("click", async () => {
+    track("landing_download_click", { os: "windows_powershell_copy" });
     const command = "irm https://raw.githubusercontent.com/jibberswrld/ambient/main/windows/install.ps1 | iex";
     const label = $("copy").querySelector("span");
     try { await navigator.clipboard.writeText(command); label.textContent = "Copied"; }
