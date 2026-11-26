@@ -24,6 +24,7 @@ pub struct GeneralSettings {
     speaks_replies: bool,
     runs_commands_without_asking: bool,
     launches_at_login: bool,
+    shares_anonymous_usage_stats: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -41,6 +42,7 @@ fn current_general_settings(app: &AppHandle, state: &AppState) -> CommandResult<
         push_to_talk_shortcut: stored.push_to_talk_shortcut,
         dock_edge: stored.bar_placement.as_ref().and_then(|placement| placement["edge"].as_str()).unwrap_or("bottom").to_string(),
         speaks_replies: stored.speaks_replies,
+        shares_anonymous_usage_stats: state.shell.analytics.is_enabled(),
         runs_commands_without_asking: runtime.approval_settings.allow_without_asking(),
         launches_at_login: app.autolaunch().is_enabled().unwrap_or(false),
     })
@@ -190,6 +192,7 @@ pub fn set_general_settings(app: AppHandle, state: State<AppState>, settings: Ge
         stored.push_to_talk_shortcut = settings.push_to_talk_shortcut;
         stored.speaks_replies = settings.speaks_replies;
     });
+    state.shell.analytics.set_enabled(settings.shares_anonymous_usage_stats);
     runtime.set_shortcut(settings.push_to_talk_shortcut);
     if !settings.speaks_replies {
         runtime.stop_playback();
@@ -281,6 +284,7 @@ pub fn get_onboarding_completed(state: State<AppState>) -> CommandResult<bool> {
 #[tauri::command]
 pub fn set_onboarding_completed(state: State<AppState>, is_completed: bool) -> CommandResult<()> {
     state.runtime()?.settings.update(|stored| stored.onboarding_completed = is_completed);
+    if is_completed { state.shell.analytics.reached(crate::analytics::Step::TourFinished); }
     Ok(())
 }
 

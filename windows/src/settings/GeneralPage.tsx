@@ -78,6 +78,14 @@ export function GeneralPage(props: { host: AmbientHost }) {
             <GroupDivider />
             <SwitchRow title="Open at login" isOn={generalSettings.launchesAtLogin} onChange={(launchesAtLogin) => applyChange({ launchesAtLogin })} />
           </SettingsGroup>
+          <SettingsGroup label="Privacy">
+            <SwitchRow
+              title="Share anonymous usage stats"
+              detail="Helps improve setup. Sends steps and command outcomes to PostHog, never your requests or account."
+              isOn={generalSettings.sharesAnonymousUsageStats}
+              onChange={(sharesAnonymousUsageStats) => applyChange({ sharesAnonymousUsageStats })}
+            />
+          </SettingsGroup>
         </>
       ) : null}
     </SettingsPage>

@@ -151,6 +151,7 @@ final class AmbientRuntime {
                 state.transition(to: .failed(.notSignedIn))
                 return
             }
+            AmbientAnalytics.shared.reached(.signedIn)
             interaction.closeGate()
             isReady = true
             onReady?()
@@ -212,11 +213,17 @@ final class AmbientRuntime {
             state.transition(to: .failed(.notSignedIn))
             return
         }
+        AmbientAnalytics.shared.commandSubmitted()
+        let input: AmbientAnalytics.Input = text == nil ? .voice : .text
         let identifier = turnIdentifier
         state.begin(userText: text ?? "")
         state.transition(to: text == nil ? .transcribing : .thinking)
         turnTask = Task {
-            defer { if identifier == turnIdentifier { turnTask = nil } }
+            var commandSucceeded = false
+            defer {
+                AmbientAnalytics.shared.commandCompleted(input: input, ok: commandSucceeded)
+                if identifier == turnIdentifier { turnTask = nil }
+            }
             // Cancellation is ordered before send, rather than an unstructured cancel racing the new turn.
             await cancellationTask?.value
             guard isCurrent(identifier) else { return }
@@ -260,6 +267,7 @@ final class AmbientRuntime {
                         if let activity = activities.last { state.transition(to: .working(activityLabel: activity.label)) }
                         else { state.transition(to: .thinking) }
                     case .finished(let finalText):
+                        commandSucceeded = true
                         if let speech {
                             speech.sentences.yield(unspokenText)
                             speech.sentences.finish()

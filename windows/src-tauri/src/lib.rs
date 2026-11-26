@@ -1,5 +1,6 @@
 //! Ambient for Windows: the Tauri shell. It composes the subsystem crates, runs the one agent pipeline (`core`),
 //! and implements the interface's host contract (`commands`). The Mac app's equivalents are `Ambient/*.swift`.
+mod analytics;
 mod commands;
 mod core;
 mod focus;
@@ -98,6 +99,7 @@ async fn start_runtime(app: AppHandle, shell: Arc<Shell>, runtime: Arc<Runtime>)
         runtime.report_failure(AgentFailure::NotSignedIn);
         return;
     }
+    shell.analytics.reached(analytics::Step::SignedIn);
     *shell.gate_screen.lock().unwrap() = None;
     *shell.gate_answers.lock().unwrap() = None;
     shell.emit("ambient:gate-screen", Value::Null);
@@ -106,6 +108,7 @@ async fn start_runtime(app: AppHandle, shell: Arc<Shell>, runtime: Arc<Runtime>)
     runtime.start_shortcut_monitor();
     if !runtime.settings.read().onboarding_completed || !shell.is_microphone_usable() {
         // With no gate screen to draw, the onboarding window shows the permissions step.
+        shell.analytics.reached(analytics::Step::PermissionsShown);
         windows::show_onboarding(&app);
         let (watching_app, watching_shell) = (app.clone(), shell.clone());
         tauri::async_runtime::spawn(async move {
@@ -126,6 +129,7 @@ async fn start_runtime(app: AppHandle, shell: Arc<Shell>, runtime: Arc<Runtime>)
 fn start(app: &AppHandle) {
     start_log();
     let shell = Shell::new(app.clone());
+    shell.analytics.launched();
     app.manage(AppState { shell: shell.clone(), runtime: OnceLock::new() });
     if let Err(error) = windows::build_tray(app) {
         log_line(&format!("the tray icon could not be created: {error}"));
@@ -152,6 +156,15 @@ fn start(app: &AppHandle) {
 }
 
 pub fn run() {
+    #[cfg(debug_assertions)]
+    if std::env::args().any(|argument| argument == "--analytics-smoke-test") {
+        // Run the real capture client without windows, microphone access or sound.
+        let analytics = analytics::Analytics::new();
+        analytics.launched();
+        analytics.launched();
+        tauri::async_runtime::block_on(async { tokio::time::sleep(Duration::from_secs(7)).await });
+        return;
+    }
     let app = tauri::Builder::default()
         // A second launch (or a link opened while running) hands its arguments to the running app and exits.
         .plugin(tauri_plugin_single_instance::init(|app, arguments, _working_directory| handle_links(app, arguments)))

@@ -354,6 +354,11 @@ struct AmbientGeneralSettingsPage: View {
                 AmbientGroupDivider()
                 AmbientSwitchRow(title: "Open at login", detail: nil, isOn: $model.generalSettings.launchesAtLogin)
             }
+            AmbientSettingsGroup(label: "Privacy") {
+                AmbientSwitchRow(title: "Share anonymous usage stats",
+                    detail: "Helps improve setup. Sends steps and command outcomes to PostHog, never your requests or account.",
+                    isOn: $model.generalSettings.sharesAnonymousUsageStats)
+            }
         }
     }
 }

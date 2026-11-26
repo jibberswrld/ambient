@@ -58,7 +58,9 @@ pub fn create_overlay(app: &AppHandle) {
 
 pub fn start_tour(app: &AppHandle) {
     end_tour(app);
-    floating_window(app, "tour", 380.0, 260.0);
+    if floating_window(app, "tour", 380.0, 260.0).is_some() {
+        app.state::<crate::AppState>().shell.analytics.reached(crate::analytics::Step::TourStarted);
+    }
 }
 
 pub fn end_tour(app: &AppHandle) {
