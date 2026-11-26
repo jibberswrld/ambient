@@ -114,6 +114,7 @@ export interface GeneralSettings {
   pushToTalkShortcut: PushToTalkShortcut;
   dockEdge: DockEdge;
   speaksReplies: boolean;
+  sharesAnonymousUsageStats: boolean;
   runsCommandsWithoutAsking: boolean;
   launchesAtLogin: boolean;
 }

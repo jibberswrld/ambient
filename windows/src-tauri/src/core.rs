@@ -25,6 +25,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
+use crate::analytics::{Analytics, Input, Step};
 use crate::screen_tools::{ScreenOverlay, ScreenToolProvider, ScreenTools};
 use crate::settings::SettingsStore;
 use crate::{log_line, windows};
@@ -82,6 +83,7 @@ struct PendingApproval {
 /// Everything the windows can observe or answer.
 pub struct Shell {
     pub app: AppHandle,
+    pub analytics: Analytics,
     phase: Mutex<Phase>,
     pending_approval: Mutex<Option<PendingApproval>>,
     pub gate_screen: Mutex<Option<Value>>,
@@ -100,6 +102,7 @@ impl Shell {
     pub fn new(app: AppHandle) -> Arc<Self> {
         Arc::new(Self {
             app,
+            analytics: Analytics::new(),
             phase: Mutex::new(Phase::Idle),
             pending_approval: Mutex::new(None),
             gate_screen: Mutex::new(None),
@@ -234,6 +237,7 @@ impl Shell {
             *current = access;
             changed
         };
+        if access == Some(MicrophoneAccess::Granted) { self.analytics.reached(Step::MicGranted); }
         if changed {
             self.emit("ambient:permission-statuses", self.permission_statuses());
         }
@@ -280,6 +284,7 @@ pub struct WindowGate {
 
 impl publik::GateUi for WindowGate {
     fn show(&mut self, screen: &publik::Screen, done: Arc<AtomicBool>) -> Option<&'static str> {
+        if screen.id == "sign_in" { self.shell.analytics.reached(Step::SigninShown); }
         let buttons: Vec<Value> = screen.buttons.iter().enumerate()
             .map(|(index, (action, label))| json!({ "action": action, "label": label, "prominence": if index == 0 { "primary" } else { "secondary" } }))
             .collect();
@@ -321,6 +326,7 @@ pub struct Runtime {
     /// Raised by every cancellation; work that began under an older number must stop touching the bar.
     turn_generation: AtomicU64,
     turn_task: Mutex<Option<JoinHandle<()>>>,
+    command_input: Mutex<Option<(u64, Input)>>,
     cancellation_task: Mutex<Option<JoinHandle<()>>>,
     playing_clip: Mutex<Option<PlayingClip>>,
     is_ready: AtomicBool,
@@ -391,6 +397,7 @@ impl Runtime {
             shell, settings, credential_source, background_tasks, memory, skills, connectors, approval_settings, session, speech, screen_tools,
             turn_generation: AtomicU64::new(0),
             turn_task: Mutex::new(None),
+            command_input: Mutex::new(None),
             cancellation_task: Mutex::new(None),
             playing_clip: Mutex::new(None),
             is_ready: AtomicBool::new(false),
@@ -434,11 +441,12 @@ impl Runtime {
     }
 
     pub fn cancel_current_turn(self: &Arc<Self>) {
-        self.turn_generation.fetch_add(1, Ordering::SeqCst);
+        let generation = self.turn_generation.fetch_add(1, Ordering::SeqCst);
         if let Some(turn_task) = self.turn_task.lock().unwrap().take() {
             log_line("turn cancelled; playback stopped");
             turn_task.abort();
         }
+        self.complete_command(generation, false);
         self.stop_playback();
         // Cancellation is ordered before the next send, rather than racing the new turn.
         let prior_cancellation = self.cancellation_task.lock().unwrap().take();
@@ -483,7 +491,9 @@ impl Runtime {
             self.report_failure(AgentFailure::NotSignedIn);
             return;
         }
+        self.shell.analytics.command_submitted();
         let generation = self.turn_generation.load(Ordering::SeqCst);
+        *self.command_input.lock().unwrap() = Some((generation, if typed_text.is_some() { Input::Text } else { Input::Voice }));
         self.shell.set_phase(if typed_text.is_some() { Phase::Thinking } else { Phase::Transcribing });
         let runtime = self.clone();
         let turn_task = tauri::async_runtime::spawn(async move {
@@ -505,6 +515,7 @@ impl Runtime {
                         }
                         Err(failure) => {
                             if runtime.is_current(generation) {
+                                runtime.complete_command(generation, false);
                                 runtime.report_failure(failure);
                             }
                             return;
@@ -518,14 +529,25 @@ impl Runtime {
             }
             let user_text = heard_text.trim().to_string();
             if user_text.is_empty() {
+                runtime.complete_command(generation, false);
                 runtime.shell.set_phase(Phase::Idle);
                 return;
             }
             log_line(&format!("heard: {user_text}"));
             runtime.shell.set_phase(Phase::Thinking);
             runtime.run_conversation(generation, user_text).await;
+            if runtime.is_current(generation) { runtime.complete_command(generation, false); }
         });
         *self.turn_task.lock().unwrap() = Some(turn_task);
+    }
+
+    fn complete_command(&self, generation: u64, ok: bool) {
+        let mut command_input = self.command_input.lock().unwrap();
+        if command_input.as_ref().is_some_and(|(command_generation, _)| *command_generation == generation) {
+            if let Some((_, input)) = command_input.take() {
+                self.shell.analytics.command_completed(input, ok);
+            }
+        }
     }
 
     async fn run_conversation(self: &Arc<Self>, generation: u64, user_text: String) {
@@ -572,6 +594,7 @@ impl Runtime {
                     }
                 }
                 AgentEvent::Finished { final_text } => {
+                    self.complete_command(generation, true);
                     if let Some(spoken_reply) = spoken_reply.take() {
                         let _ = spoken_reply.sentences.send(std::mem::take(&mut unspoken_text));
                         drop(spoken_reply.sentences);
@@ -587,7 +610,10 @@ impl Runtime {
                     let (memory, user_text, final_text) = (self.memory.clone(), user_text.clone(), final_text.clone());
                     tauri::async_runtime::spawn(async move { memory.learn(&user_text, &final_text).await });
                 }
-                AgentEvent::Failed(failure) => self.report_failure(failure.clone()),
+                AgentEvent::Failed(failure) => {
+                    self.complete_command(generation, false);
+                    self.report_failure(failure.clone());
+                }
             }
         }
     }

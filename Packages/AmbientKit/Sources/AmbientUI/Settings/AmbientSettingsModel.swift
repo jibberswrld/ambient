@@ -34,13 +34,15 @@ public struct AmbientGeneralSettings: Equatable, Sendable {
     public var speaksReplies: Bool
     public var runsCommandsWithoutAsking: Bool
     public var launchesAtLogin: Bool
+    public var sharesAnonymousUsageStats: Bool
 
-    public init(pushToTalkShortcut: AmbientPushToTalkShortcut = .controlOption, dockEdge: FlowBarDockEdge = .bottom, speaksReplies: Bool = true, runsCommandsWithoutAsking: Bool = false, launchesAtLogin: Bool = false) {
+    public init(pushToTalkShortcut: AmbientPushToTalkShortcut = .controlOption, dockEdge: FlowBarDockEdge = .bottom, speaksReplies: Bool = true, runsCommandsWithoutAsking: Bool = false, launchesAtLogin: Bool = false, sharesAnonymousUsageStats: Bool = true) {
         self.pushToTalkShortcut = pushToTalkShortcut
         self.dockEdge = dockEdge
         self.speaksReplies = speaksReplies
         self.runsCommandsWithoutAsking = runsCommandsWithoutAsking
         self.launchesAtLogin = launchesAtLogin
+        self.sharesAnonymousUsageStats = sharesAnonymousUsageStats
     }
 }
 

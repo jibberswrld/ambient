@@ -27,6 +27,9 @@ if ! grep -q '^TeamIdentifier=Z63L6KDQ9K$' <<< "$signature_details" \
 fi
 codesign --verify --strict "$app_path"
 
+# Build verification must not open windows on the owner’s desktop.
+if [[ "${1:-}" == "--build-only" ]]; then exit 0; fi
+
 # Send the app its normal termination signal and wait for that exact process.
 while read -r running_process_id; do
     # Other worktrees may be running their own build. Only quit this executable.
@@ -47,7 +50,7 @@ done < <(pgrep -x Ambient || true)
 # LaunchServices does not automatically inherit this shell's environment.
 # Pass only configured overrides; never persist them in defaults or the app bundle.
 launch_options=()
-for environment_name in PUBLIK_API_KEY PUBLIK_API_BASE_URL AMBIENT_CONNECTOR_ORIGIN; do
+for environment_name in PUBLIK_API_KEY PUBLIK_API_BASE_URL AMBIENT_CONNECTOR_ORIGIN AMBIENT_ANALYTICS_DEV; do
     if [[ -n "${!environment_name:-}" ]]; then
         launch_options+=(--env "$environment_name=${!environment_name}")
     fi

@@ -57,6 +57,7 @@ export function createMockHost(windowLabel: AmbientWindowLabel): AmbientHost {
     pushToTalkShortcut: 'controlAlt',
     dockEdge: 'bottom',
     speaksReplies: true,
+    sharesAnonymousUsageStats: true,
     runsCommandsWithoutAsking: false,
     launchesAtLogin: true,
   };

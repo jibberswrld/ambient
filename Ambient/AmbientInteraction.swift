@@ -29,6 +29,7 @@ final class AmbientInteraction: NSObject, PublikGateUI {
     }
 
     private func presentGate(_ screen: Publik.Screen) async -> String? {
+        if screen.id == "sign_in" { AmbientAnalytics.shared.reached(.signinShown) }
         let missingSetup = Publik.appToken.isEmpty && Publik.readCredential() == nil && ProcessInfo.processInfo.environment["PUBLIK_API_KEY"] == nil
         let body = missingSetup
             ? "Ambient needs a publik app token. For development, launch scripts/run.sh with PUBLIK_API_KEY in its environment."

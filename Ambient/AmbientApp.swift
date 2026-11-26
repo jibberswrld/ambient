@@ -65,6 +65,18 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Unit tests host the app executable but must not start a second live session.
         guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
+        #if DEBUG
+        if let index = ProcessInfo.processInfo.arguments.firstIndex(of: "--analytics-smoke-test"),
+           ProcessInfo.processInfo.arguments.indices.contains(index + 1) {
+            // Exercise the real client with isolated state, without windows, sign-in, permissions or sound.
+            let analytics = AmbientAnalytics(dataDirectory: URL(fileURLWithPath: ProcessInfo.processInfo.arguments[index + 1]))
+            analytics.launched()
+            analytics.launched()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 7) { NSApp.terminate(nil) }
+            return
+        }
+        #endif
+        AmbientAnalytics.shared.launched()
         // Started before the runtime so an install that cannot start can still receive the fix.
         updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: self, userDriverDelegate: nil)
         // Sparkle's own schedule only checks once a day, so a relaunch inside that day would find nothing.
@@ -99,7 +111,8 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
             dockEdge: controller.placement.edge,
             speaksReplies: runtime.spokenRepliesEnabled,
             runsCommandsWithoutAsking: runtime.approvalSettings.allowWithoutAsking,
-            launchesAtLogin: SMAppService.mainApp.status == .enabled
+            launchesAtLogin: SMAppService.mainApp.status == .enabled,
+            sharesAnonymousUsageStats: AmbientAnalytics.shared.isEnabled
         ))
         settingsModel?.appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
         settingsModel?.availableUpdateVersion = availableUpdateVersion
@@ -284,6 +297,7 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
 
     private func applySettings(_ settings: AmbientGeneralSettings) {
         guard !isUpdatingSettings, let runtime else { return }
+        AmbientAnalytics.shared.setEnabled(settings.sharesAnonymousUsageStats)
         runtime.spokenRepliesEnabled = settings.speaksReplies
         runtime.approvalSettings.allowWithoutAsking = settings.runsCommandsWithoutAsking
         UserDefaults.standard.set(settings.pushToTalkShortcut.rawValue, forKey: "ambient.pushToTalkShortcut")
@@ -316,6 +330,11 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
             .speechRecognition: Self.permissionStatus(forSpeechRecognition: AmbientPermissionHelper.speechRecognitionAuthorizationStatus(),
                                                       isWaitingForAnswer: permissionsModel.status(of: .speechRecognition) == .waiting)
         ]
+        for (permission, step) in [(AmbientPermissionKind.microphone, AmbientAnalytics.Step.micGranted),
+                                   (.accessibility, .accessibilityGranted), (.screenRecording, .screenRecordingGranted),
+                                   (.speechRecognition, .speechRecognitionGranted)] {
+            if permissionsModel.status(of: permission) == .granted { AmbientAnalytics.shared.reached(step) }
+        }
         if permissionsModel.status(of: .accessibility) == .granted { shortcutMonitor.start() }
         else { shortcutMonitor.stop() }
         tourModel?.permissionStatusesChanged(permissionsModel.statuses)
@@ -334,6 +353,7 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
 
     private func showPermissions() {
         guard let runtime else { return }
+        AmbientAnalytics.shared.reached(.permissionsShown)
         runtime.interaction.onboardingController.showPermissions(permissionsModel)
     }
 
@@ -387,6 +407,7 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
         model.onOpenConnectors = { [weak self] in self?.openSettings(section: .connectors) }
         model.onFinish = { [weak self] in
             UserDefaults.standard.set(true, forKey: "ambient.onboardingCompleted")
+            AmbientAnalytics.shared.reached(.tourFinished)
             self?.endTour()
         }
         let controller = AmbientTourPanelController(model: model)
@@ -394,6 +415,7 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
         tourController = controller
         controller.show(awayFromBarDockedTo: flowBarController?.placement.edge ?? .bottom, on: flowBarController?.dockedScreen)
         startPollingConnectedAppsDuringTour()
+        AmbientAnalytics.shared.reached(.tourStarted)
         NSLog("Ambient tour started")
     }
 
