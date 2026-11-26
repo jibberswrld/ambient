@@ -1,10 +1,10 @@
 # Ambient
 
-![Ambient — Your Mac. Just ask. A native macOS voice assistant with an orange listening waveform.](docs/listing/cover.png)
+![Ambient — Your computer. Just ask. A voice assistant for Mac and Windows with an orange listening waveform.](docs/listing/cover.png)
 
-Ambient is a voice assistant for the Mac that lives in a small translucent bar at the edge of your screen. Hold two keys, say what you want, and let go. It answers out loud, works in your connected apps, and can hand longer jobs to background agents, all without taking over your desktop.
+Ambient is a voice assistant for Mac and Windows that lives in a small translucent bar at the edge of your screen. Hold two keys, say what you want, and let go. It answers out loud, works in your connected apps, and can hand longer jobs to background agents, all without taking over your desktop.
 
-It is a native macOS app (Swift, SwiftUI and AppKit), forked from [Clicky](https://github.com/farzaa/clicky) under the [MIT license](LICENSE).
+On the Mac it is a native app (Swift, SwiftUI and AppKit); on Windows it is a Tauri app (see [Windows](#windows)). It was forked from [Clicky](https://github.com/farzaa/clicky) under the [MIT license](LICENSE).
 
 ## What it does
 
