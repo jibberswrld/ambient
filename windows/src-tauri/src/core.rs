@@ -28,6 +28,7 @@ use uuid::Uuid;
 use crate::analytics::{Analytics, Input, Step};
 use crate::screen_tools::{ScreenOverlay, ScreenToolProvider, ScreenTools};
 use crate::settings::SettingsStore;
+use crate::sounds::{SoundCue, SoundEffects};
 use crate::{log_line, windows};
 
 /// The conversation's state. Only the first four are sent to the windows as `ambient:runtime-phase`; the rest reach
@@ -84,6 +85,7 @@ struct PendingApproval {
 pub struct Shell {
     pub app: AppHandle,
     pub analytics: Analytics,
+    pub sounds: SoundEffects,
     phase: Mutex<Phase>,
     pending_approval: Mutex<Option<PendingApproval>>,
     pub gate_screen: Mutex<Option<Value>>,
@@ -103,6 +105,7 @@ impl Shell {
         Arc::new(Self {
             app,
             analytics: Analytics::new(),
+            sounds: SoundEffects::new(),
             phase: Mutex::new(Phase::Idle),
             pending_approval: Mutex::new(None),
             gate_screen: Mutex::new(None),
@@ -184,6 +187,7 @@ impl Shell {
         *self.pending_approval.lock().unwrap() = Some(PendingApproval { request: request.clone(), answer });
         log_line(&format!("approval presented: {}", request.title));
         self.emit("ambient:approval-requested", request);
+        self.sounds.play(SoundCue::Attention);
         let is_allowed = answered.await.unwrap_or(false);
         log_line(&format!("approval answered: {is_allowed}"));
         is_allowed
@@ -344,6 +348,7 @@ struct SpokenReply {
 impl Runtime {
     pub fn new(shell: Arc<Shell>) -> Result<Arc<Self>, String> {
         let settings = SettingsStore::load()?;
+        shell.sounds.set_enabled(settings.read().plays_sound_effects);
         let credential_source: Arc<dyn AiCredentialSource> = Arc::new(PublikCredentialSource::new(None));
         let completion_service: Arc<dyn TextCompletionService> = Arc::new(PublikAiClient::new(credential_source.clone()));
         let memory: Arc<dyn MemoryStore> = Arc::new(PersistentMemoryStore::new(completion_service)?);
@@ -437,6 +442,10 @@ impl Runtime {
 
     pub fn report_failure(&self, failure: AgentFailure) {
         self.shell.set_phase(Phase::Failed);
+        // Signing in has its own screen; a cancelled turn was the user's choice.
+        if !matches!(failure, AgentFailure::Cancelled | AgentFailure::NotSignedIn) {
+            self.shell.sounds.play(SoundCue::Error);
+        }
         self.shell.emit_agent_event(&AgentEvent::Failed(failure));
     }
 
@@ -535,6 +544,8 @@ impl Runtime {
             }
             log_line(&format!("heard: {user_text}"));
             runtime.shell.set_phase(Phase::Thinking);
+            // Typed and spoken requests both arrive here, once the words are known not to be empty.
+            runtime.shell.sounds.play(SoundCue::Send);
             runtime.run_conversation(generation, user_text).await;
             if runtime.is_current(generation) { runtime.complete_command(generation, false); }
         });
@@ -606,6 +617,10 @@ impl Runtime {
                     }
                     self.shell.set_phase(Phase::Finished);
                     self.shell.emit_agent_event(&event);
+                    // With replies read out loud, the voice is the feedback.
+                    if !self.speaks_replies() {
+                        self.shell.sounds.play(SoundCue::Complete);
+                    }
                     // Learning is a separate model call; it must not delay the reply or its speech.
                     let (memory, user_text, final_text) = (self.memory.clone(), user_text.clone(), final_text.clone());
                     tauri::async_runtime::spawn(async move { memory.learn(&user_text, &final_text).await });
@@ -653,7 +668,7 @@ impl Runtime {
                     continue;
                 };
                 let started_clip = match synthesis.await {
-                    Ok(Ok(audio)) => tauri::async_runtime::spawn_blocking(move || AudioPlayback::play(audio)).await.unwrap_or_else(|error| Err(error.to_string())),
+                    Ok(Ok(audio)) => tauri::async_runtime::spawn_blocking(move || AudioPlayback::play(audio, 1.0)).await.unwrap_or_else(|error| Err(error.to_string())),
                     Ok(Err(failure)) => Err(failure.to_string()),
                     Err(error) => Err(error.to_string()),
                 };
@@ -733,6 +748,7 @@ impl Runtime {
                 }
                 self.shell.show_bar();
                 self.shell.set_phase(Phase::Listening { audio_level: 0.0 });
+                self.shell.sounds.play(SoundCue::Listen);
                 let level_runtime = self.clone();
                 let last_level_sent_at = Mutex::new(Instant::now());
                 let recording_runtime = self.clone();

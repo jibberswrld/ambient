@@ -153,7 +153,8 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
             // Only the turn in the bar sounds; background agents report through the tray. A spoken reply is its own cue.
             switch event {
             case .finished where self?.runtime?.spokenRepliesEnabled == false: self?.soundEffects.play(.complete)
-            case .failed(let failure) where failure != .cancelled: self?.soundEffects.play(.error)
+            case .failed(.cancelled), .failed(.notSignedIn): break // Signing in has its own screen.
+            case .failed: self?.soundEffects.play(.error)
             default: break
             }
             self?.tourModel?.apply(event)

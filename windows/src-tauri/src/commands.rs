@@ -22,6 +22,7 @@ pub struct GeneralSettings {
     push_to_talk_shortcut: PushToTalkShortcut,
     dock_edge: String,
     speaks_replies: bool,
+    plays_sound_effects: bool,
     runs_commands_without_asking: bool,
     launches_at_login: bool,
     shares_anonymous_usage_stats: bool,
@@ -42,6 +43,7 @@ fn current_general_settings(app: &AppHandle, state: &AppState) -> CommandResult<
         push_to_talk_shortcut: stored.push_to_talk_shortcut,
         dock_edge: stored.bar_placement.as_ref().and_then(|placement| placement["edge"].as_str()).unwrap_or("bottom").to_string(),
         speaks_replies: stored.speaks_replies,
+        plays_sound_effects: stored.plays_sound_effects,
         shares_anonymous_usage_stats: state.shell.analytics.is_enabled(),
         runs_commands_without_asking: runtime.approval_settings.allow_without_asking(),
         launches_at_login: app.autolaunch().is_enabled().unwrap_or(false),
@@ -191,7 +193,9 @@ pub fn set_general_settings(app: AppHandle, state: State<AppState>, settings: Ge
     runtime.settings.update(|stored| {
         stored.push_to_talk_shortcut = settings.push_to_talk_shortcut;
         stored.speaks_replies = settings.speaks_replies;
+        stored.plays_sound_effects = settings.plays_sound_effects;
     });
+    state.shell.sounds.set_enabled(settings.plays_sound_effects);
     state.shell.analytics.set_enabled(settings.shares_anonymous_usage_stats);
     runtime.set_shortcut(settings.push_to_talk_shortcut);
     if !settings.speaks_replies {

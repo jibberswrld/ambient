@@ -114,6 +114,8 @@ export interface GeneralSettings {
   pushToTalkShortcut: PushToTalkShortcut;
   dockEdge: DockEdge;
   speaksReplies: boolean;
+  /** Short, quiet cues when Ambient listens, sends, needs an answer, finishes or fails. Played by Rust. */
+  playsSoundEffects: boolean;
   sharesAnonymousUsageStats: boolean;
   runsCommandsWithoutAsking: boolean;
   launchesAtLogin: boolean;

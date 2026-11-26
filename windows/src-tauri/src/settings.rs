@@ -11,6 +11,8 @@ use serde_json::Value;
 pub struct StoredSettings {
     pub push_to_talk_shortcut: PushToTalkShortcut,
     pub speaks_replies: bool,
+    /// Missing from files written before sound cues existed; `default` above turns those on.
+    pub plays_sound_effects: bool,
     /// The bar's placement exactly as the interface saved it; the core only reads its `edge`.
     pub bar_placement: Option<Value>,
     pub onboarding_completed: bool,
@@ -20,7 +22,7 @@ pub struct StoredSettings {
 
 impl Default for StoredSettings {
     fn default() -> Self {
-        Self { push_to_talk_shortcut: PushToTalkShortcut::default(), speaks_replies: true, bar_placement: None, onboarding_completed: false, spoken_voice: None }
+        Self { push_to_talk_shortcut: PushToTalkShortcut::default(), speaks_replies: true, plays_sound_effects: true, bar_placement: None, onboarding_completed: false, spoken_voice: None }
     }
 }
 
@@ -56,5 +58,19 @@ impl SettingsStore {
         if std::fs::write(&temporary_path, serde_json::to_vec_pretty(&*current).unwrap_or_default()).is_ok() {
             let _ = std::fs::rename(&temporary_path, &self.path);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_settings_file_from_before_sound_effects_turns_them_on() {
+        let stored: StoredSettings = serde_json::from_str(r#"{ "pushToTalkShortcut": "controlShift", "speaksReplies": false }"#).unwrap();
+        assert!(stored.plays_sound_effects);
+        assert!(!stored.speaks_replies);
+        let written = serde_json::to_value(StoredSettings { plays_sound_effects: false, ..stored }).unwrap();
+        assert_eq!(written["playsSoundEffects"], false);
     }
 }
