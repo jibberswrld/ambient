@@ -6,6 +6,7 @@ mod core;
 mod focus;
 mod screen_tools;
 mod settings;
+mod sounds;
 mod updates;
 mod windows;
 

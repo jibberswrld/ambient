@@ -6,8 +6,8 @@ import { allPushToTalkShortcuts, keycapLabels, spokenShortcutName } from '../des
 import { GroupDivider, InlineError, SettingsGroup, SettingsPage, SettingsRow, SwitchRow, messageFromRejection } from './settingsShared';
 
 /**
- * General: the shortcut held to talk, spoken replies, the bar's screen edge, command approval and Open at login.
- * The Rust core owns the truth: every change sends the whole settings object, and the page adopts what actually
+ * General: the shortcut held to talk, spoken replies, sound effects, the bar's screen edge, command approval and Open at
+ * login. The Rust core owns the truth: every change sends the whole settings object, and the page adopts what actually
  * applied (Open at login can fail, so the switch must fall back rather than lie).
  */
 export function GeneralPage(props: { host: AmbientHost }) {
@@ -58,6 +58,13 @@ export function GeneralPage(props: { host: AmbientHost }) {
             </SettingsRow>
             <GroupDivider />
             <SwitchRow title="Read replies out loud" isOn={generalSettings.speaksReplies} onChange={(speaksReplies) => applyChange({ speaksReplies })} />
+            <GroupDivider />
+            <SwitchRow
+              title="Sound effects"
+              detail="Short, quiet cues when Ambient listens, needs you, or hits a problem."
+              isOn={generalSettings.playsSoundEffects}
+              onChange={(playsSoundEffects) => applyChange({ playsSoundEffects })}
+            />
           </SettingsGroup>
           <SettingsGroup label="The bar">
             <SettingsRow title="Screen edge" detail="You can also drag the bar to any edge.">

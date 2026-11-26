@@ -42,6 +42,7 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
     /// Drawings get their own window so pointing, or the next request, never takes one away.
     private let drawingController = AmbientPointerWindowController()
     private let permissionsModel = AmbientPermissionsModel()
+    private let soundEffects = AmbientSoundEffects()
     private var tourModel: AmbientTourModel?
     private var tourController: AmbientTourPanelController?
     /// Checks for newly connected apps while the tour is on its Connectors lesson; the connector service has no push.
@@ -106,10 +107,12 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
         let controller = FlowBarPanelController(model: model)
         flowBarModel = model
         flowBarController = controller
+        soundEffects.isEnabled = UserDefaults.standard.object(forKey: "ambient.soundEffectsEnabled") as? Bool ?? true
         settingsModel = AmbientSettingsModel(generalSettings: AmbientGeneralSettings(
             pushToTalkShortcut: AmbientPushToTalkShortcut(rawValue: UserDefaults.standard.string(forKey: "ambient.pushToTalkShortcut") ?? "") ?? .controlOption,
             dockEdge: controller.placement.edge,
             speaksReplies: runtime.spokenRepliesEnabled,
+            soundEffectsEnabled: soundEffects.isEnabled,
             runsCommandsWithoutAsking: runtime.approvalSettings.allowWithoutAsking,
             launchesAtLogin: SMAppService.mainApp.status == .enabled,
             sharesAnonymousUsageStats: AmbientAnalytics.shared.isEnabled
@@ -147,6 +150,13 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
         model.onOpenURL = { NSWorkspace.shared.open($0) }
         runtime.onAgentEvent = { [weak self, weak model] event in
             model?.apply(event)
+            // Only the turn in the bar sounds; background agents report through the tray. A spoken reply is its own cue.
+            switch event {
+            case .finished where self?.runtime?.spokenRepliesEnabled == false: self?.soundEffects.play(.complete)
+            case .failed(.cancelled), .failed(.notSignedIn): break // Signing in has its own screen.
+            case .failed: self?.soundEffects.play(.error)
+            default: break
+            }
             self?.tourModel?.apply(event)
         }
         runtime.interaction.approvalHandler = { [weak self, weak model] title, detail in
@@ -154,6 +164,7 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
             self.showBar()
             let kind: FlowBarApprovalRequest.Kind = title == "Run shell command?" ? .shellCommand
                 : (["Start Codex agent?", "Start Claude agent?", "Start agent?", "Continue agent?"].contains(title) ? .backgroundAgent : .other)
+            self.soundEffects.play(.attention)
             NSLog("Ambient approval presented: %@", title)
             self.tourModel?.approvalRequested(kind: kind)
             let allowed = await model.requestApproval(FlowBarApprovalRequest(title: title, detail: detail, kind: kind))
@@ -166,6 +177,13 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
             guard let self, let model else { return }
             // Transcribing straight to idle is a recording in which nothing was heard: an empty transcript.
             if case .transcribing = self.previousRuntimePhase, case .idle = phase { self.tourModel?.heardNothing() }
+            switch (self.previousRuntimePhase, phase) {
+            case (.listening, .listening): break
+            case (_, .listening): self.soundEffects.play(.listen)
+            // A spoken or typed request reaching the agent; returning to thinking after a tool is not a new request.
+            case (.idle, .thinking), (.transcribing, .thinking), (.finished, .thinking), (.failed, .thinking): self.soundEffects.play(.send)
+            default: break
+            }
             self.previousRuntimePhase = phase
             switch phase {
             case .idle: model.returnToIdle()
@@ -299,6 +317,8 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
         guard !isUpdatingSettings, let runtime else { return }
         AmbientAnalytics.shared.setEnabled(settings.sharesAnonymousUsageStats)
         runtime.spokenRepliesEnabled = settings.speaksReplies
+        soundEffects.isEnabled = settings.soundEffectsEnabled
+        UserDefaults.standard.set(settings.soundEffectsEnabled, forKey: "ambient.soundEffectsEnabled")
         runtime.approvalSettings.allowWithoutAsking = settings.runsCommandsWithoutAsking
         UserDefaults.standard.set(settings.pushToTalkShortcut.rawValue, forKey: "ambient.pushToTalkShortcut")
         shortcutMonitor.shortcut = settings.pushToTalkShortcut

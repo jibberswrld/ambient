@@ -28,7 +28,7 @@ let package = Package(
         .target(name: "AmbientMemory", dependencies: ["AmbientContracts"], resources: [.copy("BuiltInSkills")]),
         .testTarget(name: "AmbientMemoryTests", dependencies: ["AmbientMemory"]),
 
-        .target(name: "AmbientUI", dependencies: ["AmbientContracts"]),
+        .target(name: "AmbientUI", dependencies: ["AmbientContracts"], resources: [.copy("Sound/Sounds")]),
         .testTarget(name: "AmbientUITests", dependencies: ["AmbientUI"]),
         // Runs the interface alone with scripted states, to look at it without the rest of the app.
         .executableTarget(name: "AmbientUIDemo", dependencies: ["AmbientUI"]),

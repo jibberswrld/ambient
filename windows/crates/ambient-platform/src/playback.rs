@@ -22,7 +22,8 @@ struct PlaybackState {
 }
 
 impl AudioPlayback {
-    pub fn play(bytes: Vec<u8>) -> Result<PlayingClip, String> {
+    /// `volume` scales the clip: 1.0 plays it as recorded.
+    pub fn play(bytes: Vec<u8>, volume: f32) -> Result<PlayingClip, String> {
         let state = Arc::new(Mutex::new(PlaybackState::default()));
         let playback_state = state.clone();
         let (stop_sender, stop_receiver) = mpsc::channel();
@@ -37,6 +38,7 @@ impl AudioPlayback {
                     let (stream, stream_handle) =
                         OutputStream::try_default().map_err(|error| error.to_string())?;
                     let sink = Sink::try_new(&stream_handle).map_err(|error| error.to_string())?;
+                    sink.set_volume(volume);
                     sink.append(source);
                     *playback_state.lock().unwrap() = PlaybackState {
                         is_playing: true,
@@ -185,12 +187,12 @@ mod tests {
 
     #[test]
     fn invalid_and_empty_clips_fail_before_opening_an_output_device() {
-        assert!(AudioPlayback::play(vec![]).is_err());
-        assert!(AudioPlayback::play(b"not audio".to_vec()).is_err());
+        assert!(AudioPlayback::play(vec![], 1.0).is_err());
+        assert!(AudioPlayback::play(b"not audio".to_vec(), 1.0).is_err());
         let mut empty_wav = one_second_wav();
         empty_wav.truncate(44);
         empty_wav[4..8].copy_from_slice(&36_u32.to_le_bytes());
         empty_wav[40..44].copy_from_slice(&0_u32.to_le_bytes());
-        assert!(AudioPlayback::play(empty_wav).is_err());
+        assert!(AudioPlayback::play(empty_wav, 1.0).is_err());
     }
 }
