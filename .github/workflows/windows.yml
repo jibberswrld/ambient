@@ -17,6 +17,9 @@ jobs:
   test-and-build:
     runs-on: windows-latest
     timeout-minutes: 60
+    # The smoke run launches a release build, which would otherwise count as a real install in PostHog.
+    env:
+      AMBIENT_ANALYTICS_DEV: "1"
     defaults:
       run:
         working-directory: windows
