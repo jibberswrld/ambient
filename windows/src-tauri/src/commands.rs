@@ -60,7 +60,7 @@ fn changed_settings(before: &GeneralSettings, after: &GeneralSettings) -> Vec<(&
         ("sound_effects", json!(settings.plays_sound_effects)),
         ("runs_commands_without_asking", json!(settings.runs_commands_without_asking)),
         ("launches_at_login", json!(settings.launches_at_login)),
-        ("shares_anonymous_usage_stats", json!(settings.shares_anonymous_usage_stats)),
+        ("shares_usage_stats", json!(settings.shares_anonymous_usage_stats)),
     ];
     values(before).into_iter().zip(values(after)).filter(|(old, new)| old.1 != new.1).map(|(_, new)| new).collect()
 }

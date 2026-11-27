@@ -194,7 +194,7 @@ impl Shell {
         self.sounds.play(SoundCue::Attention);
         let asked_at = Instant::now();
         let answer = answered.await;
-        self.analytics.approval(kind, match answer { Ok(true) => "allowed", Ok(false) => "denied", Err(_) => "cancelled" }, asked_at.elapsed());
+        self.analytics.approval(match kind { "shellCommand" => "shell_command", "backgroundAgent" => "background_agent", _ => "other" }, match answer { Ok(true) => "allowed", Ok(false) => "denied", Err(_) => "cancelled" }, asked_at.elapsed());
         let is_allowed = answer.unwrap_or(false);
         log_line(&format!("approval answered: {is_allowed}"));
         is_allowed

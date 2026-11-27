@@ -112,11 +112,13 @@ impl Command {
     }
 }
 
-/// A drawing as counts: how many marks of each kind and how many carry a caption, never the caption.
+/// A drawing as counts of each requested mark type (as on the Mac) and how many carry a caption, never the caption.
 pub fn drawing_properties(annotations: &[Value], display_index: usize, display_count: usize, replaced_previous: bool) -> Value {
-    let mut kinds = BTreeMap::<String, u32>::new();
+    const KNOWN_KINDS: [&str; 7] = ["arrow", "circle", "box", "line", "path", "underline", "label"];
+    let mut kinds = BTreeMap::<&str, u32>::new();
     for annotation in annotations {
-        *kinds.entry(annotation["shape"]["kind"].as_str().unwrap_or("other").to_string()).or_default() += 1;
+        let kind = annotation["type"].as_str().filter(|kind| KNOWN_KINDS.contains(kind)).unwrap_or("other");
+        *kinds.entry(kind).or_default() += 1;
     }
     let labeled_marks = annotations.iter().filter(|annotation| annotation["text"].as_str().is_some_and(|text| !text.is_empty())).count();
     json!({ "marks": annotations.len(), "kinds": kinds, "labeled_marks": labeled_marks,
@@ -125,7 +127,8 @@ pub fn drawing_properties(annotations: &[Value], display_index: usize, display_c
 
 /// The tour's lessons, named as the tour names them.
 #[derive(Clone, Copy, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+/// The tour window sends camelCase ids; events use snake_case, like the Mac.
+#[serde(rename_all(serialize = "snake_case", deserialize = "camelCase"))]
 pub enum TourLesson {
     Talk,
     ShowScreen,
@@ -415,6 +418,12 @@ fn os_version() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tour_lessons_arrive_in_camel_case_and_are_sent_in_snake_case_like_the_mac() {
+        let lesson: TourLesson = serde_json::from_value(json!("showScreen")).unwrap();
+        assert_eq!(serde_json::to_value(lesson).unwrap(), json!("show_screen"));
+    }
 
     fn directory() -> PathBuf {
         std::env::temp_dir().join(format!("ambient-analytics-{}", Uuid::new_v4()))

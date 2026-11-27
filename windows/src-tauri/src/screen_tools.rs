@@ -113,7 +113,8 @@ impl ScreenToolProvider {
             Err(message) => return ToolResult::error(message),
         };
         let annotation_count = annotations.len();
-        let drawing = crate::analytics::drawing_properties(&annotations, display.display_index, self.captures.lock().unwrap().len(), self.overlay.has_drawing());
+        let requested = arguments["annotations"].as_array().map(Vec::as_slice).unwrap_or_default();
+        let drawing = crate::analytics::drawing_properties(requested, display.display_index, self.captures.lock().unwrap().len(), self.overlay.has_drawing());
         // The shapes are Ambient's own output, logged so a wrong drawing can be diagnosed afterwards.
         crate::log_line(&format!("drawing: {}", JsonValue::Array(annotations.clone())));
         if !self.overlay.draw(&display, JsonValue::Array(annotations)) {
@@ -331,9 +332,8 @@ mod tests {
             { "type": "arrow", "x": 500, "y": 50, "text": "Click Private" },
             { "type": "line", "x": 0, "y": 0, "x2": 10, "y2": 10 }
         ] });
-        let annotations = build_annotations(&arguments, &display()).unwrap();
-        let properties = crate::analytics::drawing_properties(&annotations, 1, 2, true);
-        assert_eq!(properties, json!({ "marks": 4, "kinds": { "arrow": 1, "box": 2, "path": 1 }, "labeled_marks": 2,
+        let properties = crate::analytics::drawing_properties(arguments["annotations"].as_array().unwrap(), 1, 2, true);
+        assert_eq!(properties, json!({ "marks": 4, "kinds": { "arrow": 1, "box": 2, "line": 1 }, "labeled_marks": 2,
             "display_index": 1, "display_count": 2, "replaced_previous": true }));
         let sent = properties.to_string();
         assert!(!sent.contains("Secret") && !sent.contains("Private"));
