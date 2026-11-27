@@ -1,11 +1,14 @@
 //! `look_at_screen`, `point_at`, `draw_on_screen` and `clear_drawing`, ported from `Ambient/AmbientScreenToolProvider.swift`.
 //! Shapes are handed to the overlay in capture pixels; the overlay window covers the captured monitor and scales them.
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use ambient_contracts::{AmbientTool, ImageAttachment, JsonValue, ToolDefinition, ToolProvider, ToolResult};
 use ambient_platform::screen_capture::{capture_all_displays, CapturedDisplay};
 use async_trait::async_trait;
 use serde_json::json;
+
+use crate::analytics::Analytics;
 
 /// Base64 adds one third. Leave ample room for prompts, tools, and the reply history.
 const TOTAL_SCREEN_IMAGE_BUDGET_IN_BYTES: usize = 1_500_000;
@@ -17,17 +20,19 @@ pub trait ScreenOverlay: Send + Sync {
     fn draw(&self, display: &CapturedDisplay, annotations: JsonValue) -> bool;
     /// Removes the drawing; false when nothing was drawn.
     fn clear_drawing(&self) -> bool;
+    fn has_drawing(&self) -> bool;
 }
 
 pub struct ScreenToolProvider {
     overlay: Arc<dyn ScreenOverlay>,
+    analytics: Analytics,
     /// The displays of the most recent `look_at_screen` in this turn, without their image bytes.
     captures: Mutex<Vec<CapturedDisplay>>,
 }
 
 impl ScreenToolProvider {
-    pub fn new(overlay: Arc<dyn ScreenOverlay>) -> Arc<Self> {
-        Arc::new(Self { overlay, captures: Mutex::new(Vec::new()) })
+    pub fn new(overlay: Arc<dyn ScreenOverlay>, analytics: Analytics) -> Arc<Self> {
+        Arc::new(Self { overlay, analytics, captures: Mutex::new(Vec::new()) })
     }
 
     pub fn clear_captures(&self) {
@@ -35,6 +40,16 @@ impl ScreenToolProvider {
     }
 
     async fn look(&self) -> ToolResult {
+        let started = Instant::now();
+        let result = self.capture_displays().await;
+        self.analytics.looked_at_screen(self.captures.lock().unwrap().len(), started.elapsed(), !result.is_error);
+        if result.is_error {
+            self.analytics.error("screen_capture", "other");
+        }
+        result
+    }
+
+    async fn capture_displays(&self) -> ToolResult {
         self.clear_captures();
         let captured = match tokio::task::spawn_blocking(|| capture_all_displays(TOTAL_SCREEN_IMAGE_BUDGET_IN_BYTES / 2)).await {
             Ok(Ok(captured)) => captured,
@@ -85,6 +100,7 @@ impl ScreenToolProvider {
         if !is_inside || !self.overlay.point(&display, x, y, label) {
             return ToolResult::error("The point is outside the captured display, the display changed, or the overlay is unavailable. Capture again.");
         }
+        self.analytics.pointed(display.display_index);
         ToolResult::text(format!("Pointing at {label} on display {}.", display.display_index))
     }
 
@@ -97,11 +113,14 @@ impl ScreenToolProvider {
             Err(message) => return ToolResult::error(message),
         };
         let annotation_count = annotations.len();
+        let requested = arguments["annotations"].as_array().map(Vec::as_slice).unwrap_or_default();
+        let drawing = crate::analytics::drawing_properties(requested, display.display_index, self.captures.lock().unwrap().len(), self.overlay.has_drawing());
         // The shapes are Ambient's own output, logged so a wrong drawing can be diagnosed afterwards.
         crate::log_line(&format!("drawing: {}", JsonValue::Array(annotations.clone())));
         if !self.overlay.draw(&display, JsonValue::Array(annotations)) {
             return ToolResult::error("The display changed or the overlay is unavailable. Capture again.");
         }
+        self.analytics.drew(drawing);
         ToolResult::text(format!("Drew {annotation_count} annotations on display {}. They stay until the person asks to remove them.", display.display_index))
     }
 }
@@ -231,7 +250,13 @@ impl AmbientTool for ScreenTool {
             ScreenOperation::Look => self.provider.look().await,
             ScreenOperation::Point => self.provider.point(&arguments),
             ScreenOperation::Draw => self.provider.draw(&arguments),
-            ScreenOperation::ClearDrawing => ToolResult::text(if self.provider.overlay.clear_drawing() { "The drawing is removed." } else { "There was no drawing on screen." }),
+            ScreenOperation::ClearDrawing => {
+                if !self.provider.overlay.clear_drawing() {
+                    return ToolResult::text("There was no drawing on screen.");
+                }
+                self.provider.analytics.drawing_cleared("tool");
+                ToolResult::text("The drawing is removed.")
+            }
         }
     }
 }
@@ -297,6 +322,21 @@ mod tests {
         assert_eq!(annotations[0]["ink"], "blue");
         assert_eq!(annotations[1]["shape"]["kind"], "path");
         assert_eq!(annotations[1]["shape"]["isClosed"], false);
+    }
+
+    #[test]
+    fn a_drawing_is_summarised_as_counts_without_its_captions() {
+        let arguments = json!({ "annotations": [
+            { "type": "box", "x": 300, "y": 200, "x2": 100, "y2": 100, "text": "Secret caption" },
+            { "type": "box", "x": 10, "y": 10, "x2": 20, "y2": 20 },
+            { "type": "arrow", "x": 500, "y": 50, "text": "Click Private" },
+            { "type": "line", "x": 0, "y": 0, "x2": 10, "y2": 10 }
+        ] });
+        let properties = crate::analytics::drawing_properties(arguments["annotations"].as_array().unwrap(), 1, 2, true);
+        assert_eq!(properties, json!({ "marks": 4, "kinds": { "arrow": 1, "box": 2, "line": 1 }, "labeled_marks": 2,
+            "display_index": 1, "display_count": 2, "replaced_previous": true }));
+        let sent = properties.to_string();
+        assert!(!sent.contains("Secret") && !sent.contains("Private"));
     }
 
     #[test]

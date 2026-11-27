@@ -53,6 +53,9 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
     private var recordingStartTask: Task<Void, Never>?
     private var previousPermissionsWereGranted = false
     private var isUpdatingSettings = false
+    private var lastGeneralSettings: AmbientGeneralSettings?
+    /// Set when the turn is cancelled while an approval waits, so the answer is recorded as cancelled, not denied.
+    private var approvalWasCancelled = false
     /// Sparkle reads the publik update feed from Info.plist, checks at every launch and daily, downloads in the background and asks before relaunching.
     private var updaterController: SPUStandardUpdaterController?
     /// The newer version Sparkle has found. Kept here because it can arrive before the bar and settings exist.
@@ -143,6 +146,7 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
         // The panel persists the whole placement, including display and position, before this callback.
         model.onDockEdgeChanged = { [weak self] edge in
             guard let self else { return }
+            AmbientAnalytics.shared.barMoved(to: edge)
             self.settingsModel?.generalSettings.dockEdge = edge
             self.tourModel?.dockEdgeChanged(to: edge)
             self.tourController?.barMoved(to: edge, on: self.flowBarController?.dockedScreen)
@@ -167,12 +171,18 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
             self.soundEffects.play(.attention)
             NSLog("Ambient approval presented: %@", title)
             self.tourModel?.approvalRequested(kind: kind)
+            let asked = Date()
+            self.approvalWasCancelled = false
             let allowed = await model.requestApproval(FlowBarApprovalRequest(title: title, detail: detail, kind: kind))
             NSLog("Ambient approval answered: %@", String(allowed))
+            AmbientAnalytics.shared.approvalAnswered(kind: kind, allowed: allowed, cancelled: self.approvalWasCancelled || Task.isCancelled, since: asked)
             if kind == .backgroundAgent { self.tourModel?.approvalAnswered(isAllowed: allowed) }
             return allowed
         }
-        runtime.interaction.cancelApprovalHandler = { [weak model] in model?.returnToIdle() }
+        runtime.interaction.cancelApprovalHandler = { [weak self, weak model] in
+            self?.approvalWasCancelled = true
+            model?.returnToIdle()
+        }
         phaseSubscription = runtime.state.$phase.sink { [weak self, weak model] phase in
             guard let self, let model else { return }
             // Transcribing straight to idle is a recording in which nothing was heard: an empty transcript.
@@ -201,17 +211,22 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
             self?.pointerController.show(at: location, displayFrame: frame, label: label)
         }
         runtime.screenTools.drawHandler = { [weak self] annotations, frame in
-            self?.drawingController.show(annotations: annotations, displayFrame: frame)
+            guard let self else { return false }
+            let replacedPrevious = self.drawingController.isShowing
+            self.drawingController.show(annotations: annotations, displayFrame: frame)
+            return replacedPrevious
         }
         runtime.screenTools.clearDrawingHandler = { [weak self] in
             guard let self, self.drawingController.isShowing else { return false }
             self.drawingController.hide()
+            AmbientAnalytics.shared.drawingCleared(viaMenu: false)
             return true
         }
         dictationManager.audioLevelChanged = { [weak runtime] in runtime?.updateAudioLevel($0) }
         dictationManager.recordingFinished = { [weak runtime] in runtime?.submit(recordedWAV: $0) }
-        dictationManager.recordingFailed = { [weak runtime] in runtime?.reportFailure(.other(message: $0.localizedDescription)) }
+        dictationManager.recordingFailed = { [weak runtime] in runtime?.reportFailure(.other(message: $0.localizedDescription), stage: .recording) }
         shortcutSubscription = shortcutMonitor.shortcutTransitionPublisher.sink { [weak self] in self?.handleShortcut($0) }
+        lastGeneralSettings = settingsModel?.generalSettings
         settingsModel?.onGeneralSettingsChanged = { [weak self] in self?.applySettings($0) }
         shortcutMonitor.shortcut = settingsModel?.generalSettings.pushToTalkShortcut ?? .controlOption
         model.pushToTalkShortcut = shortcutMonitor.shortcut
@@ -256,7 +271,10 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
         statusItem = item
     }
 
-    @objc private func clearDrawingFromMenu() { drawingController.hide() }
+    @objc private func clearDrawingFromMenu() {
+        if drawingController.isShowing { AmbientAnalytics.shared.drawingCleared(viaMenu: true) }
+        drawingController.hide()
+    }
 
     private func showBar() {
         flowBarController?.show()
@@ -298,7 +316,7 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
                 NSLog("Ambient account loaded: handle=%@ plan=%@ percentage=%@", String(settingsModel.account?.publikHandle != nil), String(settingsModel.account?.planName != nil), String(settingsModel.account?.usageRemainingFraction != nil))
             } catch {
                 guard !Task.isCancelled else { return }
-                runtime.reportFailure(.other(message: "Your publik account could not be loaded. Try opening Settings again."))
+                runtime.reportFailure(.other(message: "Your publik account could not be loaded. Try opening Settings again."), stage: .account)
             }
         }
     }
@@ -330,12 +348,15 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
                 if settings.launchesAtLogin { try SMAppService.mainApp.register() }
                 else { try SMAppService.mainApp.unregister() }
             } catch {
-                runtime.reportFailure(.other(message: "Open at login could not be changed. Check Login Items in System Settings."))
+                runtime.reportFailure(.other(message: "Open at login could not be changed. Check Login Items in System Settings."), stage: .launchAtLogin)
             }
             isUpdatingSettings = true
             settingsModel?.generalSettings.launchesAtLogin = SMAppService.mainApp.status == .enabled
             isUpdatingSettings = false
         }
+        let applied = settingsModel?.generalSettings ?? settings
+        if let lastGeneralSettings { AmbientAnalytics.shared.settingsChanged(from: lastGeneralSettings, to: applied) }
+        lastGeneralSettings = applied
     }
 
     private func refreshPermissions() {
@@ -425,6 +446,7 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
         model.permissionStatusesChanged(permissionsModel.statuses)
         model.onFixPermission = { [weak self] kind in self?.grantPermission(kind) }
         model.onOpenConnectors = { [weak self] in self?.openSettings(section: .connectors) }
+        model.onLessonEnded = { AmbientAnalytics.shared.tourLessonEnded($0, completed: $1) }
         model.onFinish = { [weak self] in
             UserDefaults.standard.set(true, forKey: "ambient.onboardingCompleted")
             AmbientAnalytics.shared.reached(.tourFinished)
@@ -475,11 +497,14 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
             runtime?.beginListening()
             recordingStartTask = Task { await dictationManager.startRecording() }
         case .released:
-            tourModel?.shortcutReleased(heldFor: shortcutPressedDate.map { Date().timeIntervalSince($0) } ?? 0)
+            let heldFor = shortcutPressedDate.map { Date().timeIntervalSince($0) }
+            tourModel?.shortcutReleased(heldFor: heldFor ?? 0)
             shortcutPressedDate = nil
             recordingStartTask?.cancel()
             recordingStartTask = nil
-            if !dictationManager.finishRecording(), case .listening = runtime?.state.phase { runtime?.cancelCurrentTurn() }
+            let recorded = dictationManager.finishRecording()
+            if let heldFor { AmbientAnalytics.shared.shortcutReleased(heldFor: heldFor, recorded: recorded) }
+            if !recorded, case .listening = runtime?.state.phase { runtime?.cancelCurrentTurn() }
         case .none: break
         }
     }
@@ -512,6 +537,7 @@ final class AmbientAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        AmbientAnalytics.shared.sessionEnded()
         cancelTurn()
         runtime?.stop()
         shortcutMonitor.stop()

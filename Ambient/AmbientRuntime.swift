@@ -102,7 +102,7 @@ final class AmbientRuntime {
         self.skillStore = skillStore
         self.backgroundTaskManager = taskManager
         self.backgroundTaskStore = taskManager
-        self.connectorService = connectorClient
+        self.connectorService = AnalyticsConnectorService(base: connectorClient)
         self.approvalSettings = approvalSettings
         speechClient = PublikSpeechClient(credentialSource: credentialSource)
         let webSearch = PublikWebSearchProvider(credentialSource: credentialSource)
@@ -143,11 +143,13 @@ final class AmbientRuntime {
                 for await task in completions {
                     guard let self, !Task.isCancelled else { return }
                     state.completed(task)
+                    AmbientAnalytics.shared.backgroundTaskFinished(task)
                 }
             }
             _ = await Publik.ensureSignedIn(interaction)
             guard !Task.isCancelled else { return }
             guard await credentialSource.credential() != nil else {
+                AmbientAnalytics.shared.failed(.signIn, .notSignedIn)
                 state.transition(to: .failed(.notSignedIn))
                 return
             }
@@ -162,7 +164,7 @@ final class AmbientRuntime {
             let arguments = ProcessInfo.processInfo.arguments
             if let index = arguments.firstIndex(of: "--transcribe-wav"), arguments.indices.contains(index + 1) {
                 do { submit(recordedWAV: try Data(contentsOf: URL(fileURLWithPath: arguments[index + 1]))) }
-                catch { reportFailure(.other(message: error.localizedDescription)) }
+                catch { reportFailure(.other(message: error.localizedDescription), stage: .transcription) }
             }
             #endif
         }
@@ -193,21 +195,22 @@ final class AmbientRuntime {
             let started = Date()
             if let text = await AmbientLocalTranscriber.transcribe(wavData: recordedWAV) {
                 NSLog("Ambient transcribed on this Mac in %.2f s", Date().timeIntervalSince(started))
-                return text
+                return (text, "local")
             }
             let text = try await speechClient.transcribe(wavData: recordedWAV)
             NSLog("Ambient transcribed with publik in %.2f s", Date().timeIntervalSince(started))
-            return text
+            return (text, "publik")
         }
     }
 
     func submit(text: String) {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         guard isReady else { pendingText = text; return }
-        startTurn(text: text) { text }
+        startTurn(text: text) { (text, nil) }
     }
 
-    private func startTurn(text: String? = nil, transcription: @escaping () async throws -> String) {
+    /// `transcription` returns the request and which transcriber produced it (nil for typed text).
+    private func startTurn(text: String? = nil, transcription: @escaping () async throws -> (String, String?)) {
         cancelCurrentTurn()
         guard isReady else {
             state.transition(to: .failed(.notSignedIn))
@@ -216,29 +219,44 @@ final class AmbientRuntime {
         AmbientAnalytics.shared.commandSubmitted()
         let input: AmbientAnalytics.Input = text == nil ? .voice : .text
         let identifier = turnIdentifier
+        let started = Date()
         state.begin(userText: text ?? "")
         state.transition(to: text == nil ? .transcribing : .thinking)
         turnTask = Task {
-            var commandSucceeded = false
+            var command = AmbientAnalytics.Command(input: input)
+            var stage = AmbientAnalytics.Stage.transcription
             defer {
-                AmbientAnalytics.shared.commandCompleted(input: input, ok: commandSucceeded)
+                command.totalMilliseconds = AmbientAnalytics.milliseconds(since: started)
+                AmbientAnalytics.shared.commandCompleted(command)
                 if identifier == turnIdentifier { turnTask = nil }
             }
             // Cancellation is ordered before send, rather than an unstructured cancel racing the new turn.
             await cancellationTask?.value
             guard isCurrent(identifier) else { return }
             do {
-                let userText = try await transcription().trimmingCharacters(in: .whitespacesAndNewlines)
+                let transcriptionStarted = Date()
+                let (transcript, transcriber) = try await transcription()
+                if input == .voice {
+                    command.transcriber = transcriber
+                    command.transcribeMilliseconds = AmbientAnalytics.milliseconds(since: transcriptionStarted)
+                }
+                let userText = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
                 try Task.checkCancellation()
-                guard !userText.isEmpty else { state.transition(to: .idle); return }
+                guard !userText.isEmpty else { command.outcome = .empty; state.transition(to: .idle); return }
+                stage = .turn
+                command.requestCharacters = userText.count
+                command.spokenReplies = spokenRepliesEnabled
                 NSLog("Ambient heard: %@", userText)
                 state.begin(userText: userText)
                 state.transition(to: .thinking)
                 var accumulatedText = ""
+                let sent = Date()
                 // Everything the person reads goes through here, so the bar and the state never disagree.
                 let reveal: @MainActor (String) -> Void = { [weak self] fragment in
                     guard let self, !fragment.isEmpty, self.isCurrent(identifier) else { return }
                     accumulatedText += fragment
+                    if command.firstReplyMilliseconds == nil { command.firstReplyMilliseconds = AmbientAnalytics.milliseconds(since: sent) }
+                    command.replyCharacters = accumulatedText.count
                     self.state.transition(to: .responding(text: accumulatedText))
                     self.onAgentEvent?(.textDelta(fragment))
                 }
@@ -247,6 +265,7 @@ final class AmbientRuntime {
                 defer { speech?.sentences.finish() }
                 var unspokenText = ""
                 var activities: [(identifier: String, label: String)] = []
+                var toolStarts: [String: Date] = [:]
                 for await event in agentSession.send(UserTurn(text: userText)) {
                     guard isCurrent(identifier) else { return }
                     switch event {
@@ -258,16 +277,20 @@ final class AmbientRuntime {
                     case .toolStarted(let callID, let toolName, let activityLabel):
                         onAgentEvent?(event)
                         activities.append((callID, activityLabel))
+                        toolStarts[callID] = Date()
                         NSLog("Ambient tool started: %@", toolName)
                         state.transition(to: .working(activityLabel: activityLabel))
                     case .toolFinished(let callID, let toolName, let isError):
                         onAgentEvent?(event)
                         activities.removeAll { $0.identifier == callID }
+                        command.toolFinished(toolName, isError: isError)
+                        AmbientAnalytics.shared.toolFinished(toolName, ok: !isError, since: toolStarts.removeValue(forKey: callID) ?? Date())
                         NSLog("Ambient tool finished: %@ error=%@", toolName, String(isError))
                         if let activity = activities.last { state.transition(to: .working(activityLabel: activity.label)) }
                         else { state.transition(to: .thinking) }
                     case .finished(let finalText):
-                        commandSucceeded = true
+                        command.outcome = .finished
+                        command.replyCharacters = finalText.count
                         if let speech {
                             speech.sentences.yield(unspokenText)
                             speech.sentences.finish()
@@ -280,13 +303,17 @@ final class AmbientRuntime {
                         // Learning is a separate model call; it must not delay the reply or its speech.
                         Task { [memoryStore] in await memoryStore.learn(fromUserText: userText, assistantText: finalText) }
                     case .failed(let failure):
+                        command.outcome = AmbientAnalytics.Outcome(failure)
+                        AmbientAnalytics.shared.failed(.turn, failure)
                         onAgentEvent?(event)
                         state.transition(to: .failed(failure))
                     }
                 }
             } catch {
                 guard isCurrent(identifier) else { return }
-                reportFailure(error as? AgentFailure ?? .other(message: error.localizedDescription))
+                let failure = error as? AgentFailure ?? .other(message: error.localizedDescription)
+                command.outcome = AmbientAnalytics.Outcome(failure)
+                reportFailure(failure, stage: stage)
             }
         }
     }
@@ -346,6 +373,7 @@ final class AmbientRuntime {
                     guard player.prepareToPlay(), player.play() else { throw AgentFailure.other(message: "The spoken reply could not start playing.") }
                 } catch {
                     NSLog("Ambient speech failed for one sentence: %@", error.localizedDescription)
+                    AmbientAnalytics.shared.failed(.speech, error as? AgentFailure ?? .other(message: ""))
                     reveal(clip.text)
                     continue
                 }
@@ -404,7 +432,8 @@ final class AmbientRuntime {
         state.transition(to: .idle)
     }
 
-    func reportFailure(_ failure: AgentFailure) {
+    func reportFailure(_ failure: AgentFailure, stage: AmbientAnalytics.Stage) {
+        AmbientAnalytics.shared.failed(stage, failure)
         state.transition(to: .failed(failure))
         onAgentEvent?(.failed(failure))
     }

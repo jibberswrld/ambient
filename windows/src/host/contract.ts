@@ -331,6 +331,8 @@ export interface AmbientCommands {
   start_tour: { args: NoArgs; result: null };
   /** Closes the `tour` window. */
   end_tour: { args: NoArgs; result: null };
+  /** The tour moved past a lesson. Rust sends it as an anonymous `ambient_tour_lesson` event (nothing else). */
+  record_tour_lesson: { args: { lesson: 'talk' | 'showScreen' | 'handOff' | 'connectApps' | 'placeBar'; result: 'completed' | 'skipped' }; result: null };
   /** Removes the drawing from the overlay (emits `ambient:overlay-clear`). */
   clear_drawing: { args: NoArgs; result: null };
   /** Rust shows the Save dialog (in Documents, with `suggestedName`) and writes `text` as UTF-8. Resolves `true` when saved, `false` when cancelled; rejects when the write failed. */

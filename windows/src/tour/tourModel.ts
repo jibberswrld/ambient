@@ -217,6 +217,8 @@ export class TourModel {
   onOpenConnectors: (() => void) | null = null;
   /** The tour ended, finished or not. The app records completion and closes the coach. */
   onFinish: (() => void) | null = null;
+  /** The person moved past a lesson, done or skipped. The app records it as an anonymous usage event. */
+  onLessonEnded: ((lesson: TourLesson, result: 'completed' | 'skipped') => void) | null = null;
 
   // Private ---------------------------------------------------------------------------------------------------------
 
@@ -471,6 +473,7 @@ export class TourModel {
   advanceToNextStep(): void {
     const lesson = this.currentLesson;
     if (lesson === null) return;
+    this.onLessonEnded?.(lesson, this.currentLessonIsComplete ? 'completed' : 'skipped');
     const nextLesson = allTourLessons[allTourLessons.indexOf(lesson) + 1];
     this.currentStep = nextLesson === undefined ? { kind: 'finished' } : { kind: 'lesson', lesson: nextLesson };
     this.resetForNewLesson();

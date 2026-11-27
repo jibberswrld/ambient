@@ -56,6 +56,17 @@ final class AmbientTourModelTests: XCTestCase {
         XCTAssertFalse(tourModel.isCurrentLessonComplete)
     }
 
+    func testEachLessonReportsWhetherItWasCompletedOrSkipped() {
+        let tourModel = makeTour()
+        var endedLessons: [(AmbientTourLesson, Bool)] = []
+        tourModel.onLessonEnded = { endedLessons.append(($0, $1)) }
+        speakAndGetReply(tourModel)
+        tourModel.advanceToNextStep()
+        tourModel.skipCurrentLesson()
+        XCTAssertEqual(endedLessons.map(\.0), [.talk, .showScreen])
+        XCTAssertEqual(endedLessons.map(\.1), [true, false])
+    }
+
     func testEndingTheTourReportsFinishFromAnyLessonAndFromTheLastCard() {
         var finishCount = 0
         let midwayTour = makeTour(at: .handOff)

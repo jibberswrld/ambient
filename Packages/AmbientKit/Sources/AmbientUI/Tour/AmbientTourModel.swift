@@ -154,6 +154,8 @@ public final class AmbientTourModel {
     public var onOpenConnectors: (() -> Void)?
     /// The tour ended, finished or not. The app records completion and closes the coach.
     public var onFinish: (() -> Void)?
+    /// The person moved past a lesson: true when it was completed, false when skipped.
+    public var onLessonEnded: ((AmbientTourLesson, Bool) -> Void)?
 
     // MARK: Private
 
@@ -422,6 +424,7 @@ public final class AmbientTourModel {
 
     public func advanceToNextStep() {
         guard let lesson = currentLesson else { return }
+        onLessonEnded?(lesson, isCurrentLessonComplete)
         let nextLessonIndex = lesson.rawValue + 1
         if let nextLesson = AmbientTourLesson(rawValue: nextLessonIndex) {
             step = .lesson(nextLesson)

@@ -373,6 +373,7 @@ export function createMockHost(windowLabel: AmbientWindowLabel): AmbientHost {
     hide_bar: () => null,
     start_tour: () => null,
     end_tour: () => null,
+    record_tour_lesson: () => null,
     clear_drawing: () => {
       emit('ambient:overlay-clear', null);
       return null;
