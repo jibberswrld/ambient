@@ -5,7 +5,8 @@ import AmbientUI
 @MainActor
 final class AmbientScreenToolProvider: ToolProvider {
     var pointHandler: ((CGPoint, CGRect, String) -> Void)?
-    var drawHandler: (([AmbientScreenAnnotation], CGRect) -> Void)?
+    /// Shows the drawing; true when it replaced one already on screen.
+    var drawHandler: (([AmbientScreenAnnotation], CGRect) -> Bool)?
     /// Removes the drawing; false when nothing was drawn.
     var clearDrawingHandler: (() -> Bool)?
     private(set) var captures: [AmbientScreenCapture] = []
@@ -45,8 +46,11 @@ final class AmbientScreenToolProvider: ToolProvider {
 
     func look() async -> ToolResult {
         captures = []
+        let started = Date()
+        defer { AmbientAnalytics.shared.lookedAtScreen(displays: captures.count, since: started) }
         guard CGPreflightScreenCaptureAccess() else {
             NSLog("Ambient screen capture denied: Screen Recording permission is not granted")
+            AmbientAnalytics.shared.failed(.screenCapture, .other(message: ""))
             return ToolResult(content: "Screen Recording permission is not granted to Ambient. Grant it in System Settings > Privacy & Security > Screen Recording, then restart Ambient.", isError: true)
         }
         do {
@@ -63,6 +67,7 @@ final class AmbientScreenToolProvider: ToolProvider {
             NSLog("Ambient screen capture succeeded: %ld displays", images.count)
             return ToolResult(content: "Captured \(images.count) displays. Coordinates refer to these screenshot pixels.", images: images)
         } catch {
+            if !(error is CancellationError) { AmbientAnalytics.shared.failed(.screenCapture, .other(message: "")) }
             return ToolResult(content: "Screen capture failed: \(error.localizedDescription)", isError: true)
         }
     }
@@ -86,6 +91,7 @@ final class AmbientScreenToolProvider: ToolProvider {
             y: capture.displayFrame.maxY - y / Double(capture.screenshotHeightInPixels) * capture.displayFrame.height
         )
         pointHandler(location, capture.displayFrame, label)
+        AmbientAnalytics.shared.pointed(displayIndex: Int(displayIndex))
         return ToolResult(content: "Pointing at \(label) on display \(Int(displayIndex)).")
     }
 }
@@ -153,7 +159,8 @@ extension AmbientScreenToolProvider {
         }
         // The shapes are Ambient's own output, logged so a wrong drawing can be diagnosed afterwards.
         NSLog("Ambient drawing: %@", String(describing: annotations))
-        drawHandler(annotations, capture.displayFrame)
+        let replacedPrevious = drawHandler(annotations, capture.displayFrame)
+        AmbientAnalytics.shared.drew(items, displayIndex: Int(displayIndex), displayCount: captures.count, replacedPrevious: replacedPrevious)
         return ToolResult(content: "Drew \(annotations.count) annotations on display \(Int(displayIndex)). They stay until the person asks to remove them.")
     }
 }
