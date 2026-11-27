@@ -4,6 +4,7 @@
 //! `Shell` is what the windows see (events, approvals, the sign-in gate, the overlay). `Runtime` owns the services and
 //! runs turns. The pipeline is: hold the shortcut → 16 kHz WAV → publik transcription → `AmbientAgentSession` with
 //! tools → memory learning and optional spoken reply.
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -25,7 +26,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
-use crate::analytics::{Analytics, Input, Step};
+use crate::analytics::{failure_kind, Analytics, Command, Input, Outcome, Step};
 use crate::screen_tools::{ScreenOverlay, ScreenToolProvider, ScreenTools};
 use crate::settings::SettingsStore;
 use crate::sounds::{SoundCue, SoundEffects};
@@ -94,6 +95,8 @@ pub struct Shell {
     pub account_summary: Mutex<Option<Value>>,
     pub settings_navigation: Mutex<Value>,
     pub microphone_access: Mutex<Option<MicrophoneAccess>>,
+    /// App slugs whose authorisation page was opened, until the app is seen connected.
+    pub authorizing_connectors: Mutex<HashSet<String>>,
     /// False while the person has hidden the bar from the tray.
     pub bar_should_be_visible: AtomicBool,
     /// The bar's page has put the window where it belongs; before that, showing it would flash it in the wrong place.
@@ -114,6 +117,7 @@ impl Shell {
             account_summary: Mutex::new(None),
             settings_navigation: Mutex::new(json!({ "section": "general", "taskId": null })),
             microphone_access: Mutex::new(None),
+            authorizing_connectors: Mutex::new(HashSet::new()),
             bar_should_be_visible: AtomicBool::new(false),
             bar_has_been_placed: AtomicBool::new(false),
         })
@@ -188,7 +192,10 @@ impl Shell {
         log_line(&format!("approval presented: {}", request.title));
         self.emit("ambient:approval-requested", request);
         self.sounds.play(SoundCue::Attention);
-        let is_allowed = answered.await.unwrap_or(false);
+        let asked_at = Instant::now();
+        let answer = answered.await;
+        self.analytics.approval(kind, match answer { Ok(true) => "allowed", Ok(false) => "denied", Err(_) => "cancelled" }, asked_at.elapsed());
+        let is_allowed = answer.unwrap_or(false);
         log_line(&format!("approval answered: {is_allowed}"));
         is_allowed
     }
@@ -279,6 +286,10 @@ impl ScreenOverlay for Shell {
         let _ = self.app.emit_to("overlay", "ambient:overlay-clear", Value::Null);
         had_drawing
     }
+
+    fn has_drawing(&self) -> bool {
+        self.overlay_drawing.lock().unwrap().is_some()
+    }
 }
 
 /// Draws the publik sign-in gate in the onboarding window. `show` runs on the sign-in module's own blocking thread.
@@ -330,7 +341,7 @@ pub struct Runtime {
     /// Raised by every cancellation; work that began under an older number must stop touching the bar.
     turn_generation: AtomicU64,
     turn_task: Mutex<Option<JoinHandle<()>>>,
-    command_input: Mutex<Option<(u64, Input)>>,
+    command: Mutex<Option<(u64, Command)>>,
     cancellation_task: Mutex<Option<JoinHandle<()>>>,
     playing_clip: Mutex<Option<PlayingClip>>,
     is_ready: AtomicBool,
@@ -365,7 +376,7 @@ impl Runtime {
         }));
         let memory_tools: Arc<dyn ToolProvider> = Arc::new(MemoryToolProvider::new(memory.clone()));
         let skill_tools: Arc<dyn ToolProvider> = Arc::new(SkillToolProvider::new(skills.clone()));
-        let screen_tools = ScreenToolProvider::new(shell.clone());
+        let screen_tools = ScreenToolProvider::new(shell.clone(), shell.analytics.clone());
 
         // A background agent is a second conversation on the person's publik account: the same tools minus the
         // screen and spawning, plus a shell confined to its working directory, and more reasoning than the bar.
@@ -402,7 +413,7 @@ impl Runtime {
             shell, settings, credential_source, background_tasks, memory, skills, connectors, approval_settings, session, speech, screen_tools,
             turn_generation: AtomicU64::new(0),
             turn_task: Mutex::new(None),
-            command_input: Mutex::new(None),
+            command: Mutex::new(None),
             cancellation_task: Mutex::new(None),
             playing_clip: Mutex::new(None),
             is_ready: AtomicBool::new(false),
@@ -440,7 +451,9 @@ impl Runtime {
         }
     }
 
-    pub fn report_failure(&self, failure: AgentFailure) {
+    /// `stage` names where it failed, for analytics: turn, transcription, sign_in, shortcut, recording, account, settings.
+    pub fn report_failure(&self, stage: &'static str, failure: AgentFailure) {
+        self.shell.analytics.error(stage, failure_kind(&failure));
         self.shell.set_phase(Phase::Failed);
         // Signing in has its own screen; a cancelled turn was the user's choice.
         if !matches!(failure, AgentFailure::Cancelled | AgentFailure::NotSignedIn) {
@@ -455,7 +468,7 @@ impl Runtime {
             log_line("turn cancelled; playback stopped");
             turn_task.abort();
         }
-        self.complete_command(generation, false);
+        self.complete_command(generation, Outcome::Cancelled);
         self.stop_playback();
         // Cancellation is ordered before the next send, rather than racing the new turn.
         let prior_cancellation = self.cancellation_task.lock().unwrap().take();
@@ -497,12 +510,12 @@ impl Runtime {
     fn start_turn(self: &Arc<Self>, typed_text: Option<String>, recorded_wav: Option<Vec<u8>>) {
         self.cancel_current_turn();
         if !self.is_ready() {
-            self.report_failure(AgentFailure::NotSignedIn);
+            self.report_failure("turn", AgentFailure::NotSignedIn);
             return;
         }
         self.shell.analytics.command_submitted();
         let generation = self.turn_generation.load(Ordering::SeqCst);
-        *self.command_input.lock().unwrap() = Some((generation, if typed_text.is_some() { Input::Text } else { Input::Voice }));
+        *self.command.lock().unwrap() = Some((generation, Command::new(if typed_text.is_some() { Input::Text } else { Input::Voice })));
         self.shell.set_phase(if typed_text.is_some() { Phase::Thinking } else { Phase::Transcribing });
         let runtime = self.clone();
         let turn_task = tauri::async_runtime::spawn(async move {
@@ -517,15 +530,17 @@ impl Runtime {
                 (Some(text), _) => text,
                 (None, Some(wav_data)) => {
                     let started = Instant::now();
-                    match runtime.speech.transcribe(wav_data).await {
+                    let transcribed = runtime.speech.transcribe(wav_data).await;
+                    runtime.update_command(generation, |command| command.transcribe_ms = Some(started.elapsed().as_millis()));
+                    match transcribed {
                         Ok(text) => {
                             log_line(&format!("transcribed with publik in {:.2} s", started.elapsed().as_secs_f64()));
                             text
                         }
                         Err(failure) => {
                             if runtime.is_current(generation) {
-                                runtime.complete_command(generation, false);
-                                runtime.report_failure(failure);
+                                runtime.complete_command(generation, Outcome::of(&failure));
+                                runtime.report_failure("transcription", failure);
                             }
                             return;
                         }
@@ -538,25 +553,32 @@ impl Runtime {
             }
             let user_text = heard_text.trim().to_string();
             if user_text.is_empty() {
-                runtime.complete_command(generation, false);
+                runtime.complete_command(generation, Outcome::Empty);
                 runtime.shell.set_phase(Phase::Idle);
                 return;
             }
             log_line(&format!("heard: {user_text}"));
+            runtime.update_command(generation, |command| command.request_chars = Some(user_text.chars().count()));
             runtime.shell.set_phase(Phase::Thinking);
             // Typed and spoken requests both arrive here, once the words are known not to be empty.
             runtime.shell.sounds.play(SoundCue::Send);
             runtime.run_conversation(generation, user_text).await;
-            if runtime.is_current(generation) { runtime.complete_command(generation, false); }
+            if runtime.is_current(generation) { runtime.complete_command(generation, Outcome::Failed); }
         });
         *self.turn_task.lock().unwrap() = Some(turn_task);
     }
 
-    fn complete_command(&self, generation: u64, ok: bool) {
-        let mut command_input = self.command_input.lock().unwrap();
-        if command_input.as_ref().is_some_and(|(command_generation, _)| *command_generation == generation) {
-            if let Some((_, input)) = command_input.take() {
-                self.shell.analytics.command_completed(input, ok);
+    fn update_command(&self, generation: u64, change: impl FnOnce(&mut Command)) {
+        if let Some((_, command)) = self.command.lock().unwrap().as_mut().filter(|(command_generation, _)| *command_generation == generation) {
+            change(command);
+        }
+    }
+
+    fn complete_command(&self, generation: u64, outcome: Outcome) {
+        let mut slot = self.command.lock().unwrap();
+        if slot.as_ref().is_some_and(|(command_generation, _)| *command_generation == generation) {
+            if let Some((_, command)) = slot.take() {
+                self.shell.analytics.command_completed(&command, outcome);
             }
         }
     }
@@ -568,13 +590,19 @@ impl Runtime {
             if fragment.is_empty() || !revealing_runtime.is_current(generation) {
                 return;
             }
+            revealing_runtime.update_command(generation, |command| command.revealed(fragment.chars().count()));
             revealing_runtime.shell.set_phase(Phase::Responding);
             revealing_runtime.shell.emit_agent_event(&AgentEvent::TextDelta(fragment.to_string()));
         });
         // With spoken replies on, each sentence is written as it is said, not ahead of the voice.
         let mut spoken_reply = self.speaks_replies().then(|| self.start_speaking(generation, reveal.clone()));
         let mut unspoken_text = String::new();
-        let mut activities: Vec<(String, String)> = Vec::new();
+        let mut activities: Vec<(String, Instant)> = Vec::new();
+        let spoken_replies = spoken_reply.is_some();
+        self.update_command(generation, |command| {
+            command.spoken_replies = Some(spoken_replies);
+            command.sent_at = Some(Instant::now());
+        });
         let mut events = self.session.send(UserTurn::text(user_text.clone()));
         while let Some(event) = events.recv().await {
             if !self.is_current(generation) {
@@ -590,14 +618,22 @@ impl Runtime {
                         }
                     }
                 },
-                AgentEvent::ToolStarted { call_id, tool_name, activity_label } => {
+                AgentEvent::ToolStarted { call_id, tool_name, .. } => {
                     self.shell.emit_agent_event(&event);
-                    activities.push((call_id.clone(), activity_label.clone()));
+                    activities.push((call_id.clone(), Instant::now()));
                     log_line(&format!("tool started: {tool_name}"));
                     self.shell.set_phase(Phase::Working);
                 }
                 AgentEvent::ToolFinished { call_id, tool_name, is_error } => {
                     self.shell.emit_agent_event(&event);
+                    if let Some((_, started)) = activities.iter().find(|(active_call_id, _)| active_call_id == call_id) {
+                        self.shell.analytics.tool_finished(tool_name, !is_error, started.elapsed());
+                    }
+                    self.update_command(generation, |command| {
+                        command.tool_calls += 1;
+                        command.tool_errors += u32::from(*is_error);
+                        command.tools.insert(tool_name.clone());
+                    });
                     activities.retain(|(active_call_id, _)| active_call_id != call_id);
                     log_line(&format!("tool finished: {tool_name} error={is_error}"));
                     if activities.is_empty() {
@@ -605,7 +641,8 @@ impl Runtime {
                     }
                 }
                 AgentEvent::Finished { final_text } => {
-                    self.complete_command(generation, true);
+                    // Recorded once the reply has also been said, as on the Mac.
+                    self.update_command(generation, |command| command.finished = true);
                     if let Some(spoken_reply) = spoken_reply.take() {
                         let _ = spoken_reply.sentences.send(std::mem::take(&mut unspoken_text));
                         drop(spoken_reply.sentences);
@@ -626,8 +663,8 @@ impl Runtime {
                     tauri::async_runtime::spawn(async move { memory.learn(&user_text, &final_text).await });
                 }
                 AgentEvent::Failed(failure) => {
-                    self.complete_command(generation, false);
-                    self.report_failure(failure.clone());
+                    self.complete_command(generation, Outcome::of(failure));
+                    self.report_failure("turn", failure.clone());
                 }
             }
         }
@@ -679,6 +716,7 @@ impl Runtime {
                     Ok(clip) => *runtime.playing_clip.lock().unwrap() = Some(clip),
                     Err(message) => {
                         log_line(&format!("speech failed for one sentence: {message}"));
+                        runtime.shell.analytics.error("speech", "other");
                         reveal(&text);
                         continue;
                     }
@@ -724,7 +762,7 @@ impl Runtime {
             Ok(monitor) => *self.shortcut_monitor.lock().unwrap() = Some(monitor),
             Err(message) => {
                 log_line(&format!("the push-to-talk shortcut could not start: {message}"));
-                self.report_failure(AgentFailure::Other { message: "The hold-to-talk shortcut could not start. Restart Ambient to try again.".into() });
+                self.report_failure("shortcut", AgentFailure::Other { message: "The hold-to-talk shortcut could not start. Restart Ambient to try again.".into() });
             }
         }
     }
@@ -743,7 +781,7 @@ impl Runtime {
                 self.shell.emit("ambient:push-to-talk", json!({ "kind": "pressed" }));
                 self.cancel_turn();
                 if !self.is_ready() {
-                    self.report_failure(AgentFailure::Other { message: "Finish signing in with publik before recording.".into() });
+                    self.report_failure("sign_in", AgentFailure::Other { message: "Finish signing in with publik before recording.".into() });
                     return;
                 }
                 self.shell.show_bar();
@@ -766,15 +804,16 @@ impl Runtime {
                 .await
                 .unwrap_or_else(|error| Err(error.to_string()));
                 if let Err(message) = started {
-                    self.report_failure(AgentFailure::Other { message });
+                    self.report_failure("recording", AgentFailure::Other { message });
                     self.shell.refresh_microphone_access().await;
                 }
             }
             ShortcutTransition::Released => {
-                let held_for_seconds = self.shortcut_pressed_at.lock().unwrap().take().map(|pressed_at| pressed_at.elapsed().as_secs_f64()).unwrap_or(0.0);
-                self.shell.emit("ambient:push-to-talk", json!({ "kind": "released", "heldForSeconds": held_for_seconds }));
+                let held_for = self.shortcut_pressed_at.lock().unwrap().take().map(|pressed_at| pressed_at.elapsed()).unwrap_or_default();
+                self.shell.emit("ambient:push-to-talk", json!({ "kind": "released", "heldForSeconds": held_for.as_secs_f64() }));
                 let recording_runtime = self.clone();
                 let recording = tauri::async_runtime::spawn_blocking(move || recording_runtime.recorder.lock().unwrap().finish()).await.ok().flatten();
+                self.shell.analytics.shortcut_released(held_for, if recording.is_some() { "recorded" } else { "too_short" });
                 match recording {
                     Some(wav_data) => self.submit_recording(wav_data),
                     None => {
@@ -800,7 +839,7 @@ impl Runtime {
                 *self.shell.account_summary.lock().unwrap() = Some(summary.clone());
                 self.shell.emit("ambient:account-summary", summary);
             }
-            _ => self.report_failure(AgentFailure::Other { message: "Your publik account could not be loaded. Try opening Settings again.".into() }),
+            _ => self.report_failure("account", AgentFailure::Other { message: "Your publik account could not be loaded. Try opening Settings again.".into() }),
         }
     }
 

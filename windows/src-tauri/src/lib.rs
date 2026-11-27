@@ -79,9 +79,11 @@ fn forward_updates<Item: serde::Serialize + Clone + Send + Sync + 'static>(shell
 async fn start_runtime(app: AppHandle, shell: Arc<Shell>, runtime: Arc<Runtime>) {
     // Subscribed before sign-in can enable any tools, so even short tasks surface.
     let mut completions = runtime.background_tasks.completions();
+    let completion_shell = shell.clone();
     tauri::async_runtime::spawn(async move {
         while let Some(task) = completions.recv().await {
             log_line(&format!("background completion: {} — {:?}", task.title, task.status));
+            completion_shell.analytics.background_task_finished(&task);
         }
     });
     forward_updates(shell.clone(), "ambient:background-tasks", runtime.background_tasks.updates());
@@ -97,7 +99,7 @@ async fn start_runtime(app: AppHandle, shell: Arc<Shell>, runtime: Arc<Runtime>)
     })
     .await;
     if signed_in.is_err() || runtime.credential_source.credential().await.is_none() {
-        runtime.report_failure(AgentFailure::NotSignedIn);
+        runtime.report_failure("sign_in", AgentFailure::NotSignedIn);
         return;
     }
     shell.analytics.reached(analytics::Step::SignedIn);
@@ -187,7 +189,7 @@ pub fn run() {
             commands::get_permission_statuses, commands::request_microphone_permission, commands::open_microphone_settings, commands::finish_permissions_step,
             commands::get_onboarding_completed, commands::set_onboarding_completed, commands::get_gate_screen, commands::answer_gate,
             commands::open_settings, commands::open_url, commands::check_for_updates, commands::quit, commands::show_bar, commands::hide_bar,
-            commands::start_tour, commands::end_tour, commands::clear_drawing, commands::save_text_file,
+            commands::start_tour, commands::end_tour, commands::record_tour_lesson, commands::clear_drawing, commands::save_text_file,
             commands::set_window_frame, commands::set_bar_accepts_keyboard, commands::get_overlay_drawing, commands::overlay_content_changed,
         ])
         .setup(|app| {
@@ -203,6 +205,7 @@ pub fn run() {
             if let Ok(runtime) = app.state::<AppState>().runtime() {
                 runtime.stop();
             }
+            app.state::<AppState>().shell.analytics.session_ended();
         }
         _ => {}
     });

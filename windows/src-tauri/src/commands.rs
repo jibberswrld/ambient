@@ -10,6 +10,7 @@ use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_dialog::DialogExt;
 use uuid::Uuid;
 
+use crate::analytics::{LessonResult, TourLesson};
 use crate::core::ApprovalRequest;
 use crate::screen_tools::ScreenOverlay;
 use crate::{windows, AppState};
@@ -48,6 +49,20 @@ fn current_general_settings(app: &AppHandle, state: &AppState) -> CommandResult<
         runs_commands_without_asking: runtime.approval_settings.allow_without_asking(),
         launches_at_login: app.autolaunch().is_enabled().unwrap_or(false),
     })
+}
+
+/// Each setting that differs, under a stable name, with its new value. Only booleans and enums.
+fn changed_settings(before: &GeneralSettings, after: &GeneralSettings) -> Vec<(&'static str, Value)> {
+    let values = |settings: &GeneralSettings| [
+        ("push_to_talk_shortcut", json!(settings.push_to_talk_shortcut)),
+        ("dock_edge", json!(settings.dock_edge)),
+        ("speaks_replies", json!(settings.speaks_replies)),
+        ("sound_effects", json!(settings.plays_sound_effects)),
+        ("runs_commands_without_asking", json!(settings.runs_commands_without_asking)),
+        ("launches_at_login", json!(settings.launches_at_login)),
+        ("shares_anonymous_usage_stats", json!(settings.shares_anonymous_usage_stats)),
+    ];
+    values(before).into_iter().zip(values(after)).filter(|(old, new)| old.1 != new.1).map(|(_, new)| new).collect()
 }
 
 // ---------- The turn ----------
@@ -132,6 +147,7 @@ pub async fn get_automatic_learning_enabled(state: State<'_, AppState>) -> Comma
 #[tauri::command]
 pub async fn set_automatic_learning_enabled(state: State<'_, AppState>, is_enabled: bool) -> CommandResult<()> {
     state.runtime()?.memory.set_automatic_learning_enabled(is_enabled).await;
+    state.shell.analytics.setting_changed("automatic_learning", json!(is_enabled));
     Ok(())
 }
 
@@ -164,19 +180,28 @@ pub async fn delete_skill(state: State<'_, AppState>, skill_name: String) -> Com
 
 #[tauri::command]
 pub async fn get_connector_apps(state: State<'_, AppState>, query: String) -> CommandResult<Vec<ConnectorApp>> {
-    state.runtime()?.connectors.apps(&query).await
+    let apps = state.runtime()?.connectors.apps(&query).await?;
+    // Connecting finishes in the browser; it is noticed the next time the list shows the app connected.
+    let mut authorizing = state.shell.authorizing_connectors.lock().unwrap();
+    for app in apps.iter().filter(|app| app.is_connected && authorizing.remove(&app.slug)) {
+        state.shell.analytics.connector(true, &app.slug);
+    }
+    Ok(apps)
 }
 
 #[tauri::command]
 pub async fn authorize_connector(state: State<'_, AppState>, app_slug: String) -> CommandResult<()> {
     let authorization_url = state.runtime()?.connectors.authorization_url(&app_slug).await?;
     state.shell.open_in_browser(&authorization_url);
+    state.shell.authorizing_connectors.lock().unwrap().insert(app_slug);
     Ok(())
 }
 
 #[tauri::command]
 pub async fn disconnect_connector(state: State<'_, AppState>, app_slug: String) -> CommandResult<()> {
-    state.runtime()?.connectors.disconnect(&app_slug).await
+    state.runtime()?.connectors.disconnect(&app_slug).await?;
+    state.shell.analytics.connector(false, &app_slug);
+    Ok(())
 }
 
 // ---------- Settings and placement ----------
@@ -205,7 +230,7 @@ pub fn set_general_settings(app: AppHandle, state: State<AppState>, settings: Ge
     if settings.launches_at_login != before.launches_at_login {
         let changed = if settings.launches_at_login { app.autolaunch().enable() } else { app.autolaunch().disable() };
         if changed.is_err() {
-            runtime.report_failure(ambient_contracts::AgentFailure::Other { message: "Open at login could not be changed. Check Startup apps in Windows Settings.".into() });
+            runtime.report_failure("settings", ambient_contracts::AgentFailure::Other { message: "Open at login could not be changed. Check Startup apps in Windows Settings.".into() });
         }
     }
     if settings.dock_edge != before.dock_edge {
@@ -216,6 +241,12 @@ pub fn set_general_settings(app: AppHandle, state: State<AppState>, settings: Ge
         state.shell.emit("ambient:bar-placement", placement);
     }
     let applied = current_general_settings(&app, &state)?;
+    for (setting, value) in changed_settings(&before, &applied) {
+        state.shell.analytics.setting_changed(setting, value);
+    }
+    if applied.dock_edge != before.dock_edge {
+        state.shell.analytics.bar_moved(&applied.dock_edge);
+    }
     state.shell.emit("ambient:general-settings", applied.clone());
     Ok(applied)
 }
@@ -227,9 +258,14 @@ pub fn get_bar_placement(state: State<AppState>) -> CommandResult<Option<Value>>
 
 #[tauri::command]
 pub fn set_bar_placement(app: AppHandle, state: State<AppState>, placement: Value) -> CommandResult<()> {
+    let edge_before = current_general_settings(&app, &state)?.dock_edge;
     state.runtime()?.settings.update(|stored| stored.bar_placement = Some(placement.clone()));
     state.shell.emit("ambient:bar-placement", placement);
-    state.shell.emit("ambient:general-settings", current_general_settings(&app, &state)?);
+    let applied = current_general_settings(&app, &state)?;
+    if applied.dock_edge != edge_before {
+        state.shell.analytics.bar_moved(&applied.dock_edge);
+    }
+    state.shell.emit("ambient:general-settings", applied);
     Ok(())
 }
 
@@ -378,8 +414,15 @@ pub async fn end_tour(app: AppHandle) {
 }
 
 #[tauri::command]
+pub fn record_tour_lesson(state: State<AppState>, lesson: TourLesson, result: LessonResult) {
+    state.shell.analytics.tour_lesson(lesson, result);
+}
+
+#[tauri::command]
 pub fn clear_drawing(state: State<AppState>) {
-    state.shell.clear_drawing();
+    if state.shell.clear_drawing() {
+        state.shell.analytics.drawing_cleared("menu");
+    }
 }
 
 #[tauri::command]
@@ -463,5 +506,19 @@ pub fn overlay_content_changed(app: AppHandle, has_content: bool) {
         if let Some(overlay) = app.get_webview_window("overlay") {
             let _ = overlay.hide();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_changed_settings_are_reported_with_their_new_values() {
+        let before = GeneralSettings { push_to_talk_shortcut: PushToTalkShortcut::default(), dock_edge: "bottom".into(), speaks_replies: true,
+            plays_sound_effects: true, runs_commands_without_asking: false, launches_at_login: false, shares_anonymous_usage_stats: true };
+        let after = GeneralSettings { dock_edge: "left".into(), plays_sound_effects: false, ..before.clone() };
+        assert_eq!(changed_settings(&before, &after), vec![("dock_edge", json!("left")), ("sound_effects", json!(false))]);
+        assert!(changed_settings(&before, &before).is_empty());
     }
 }

@@ -139,7 +139,7 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
             }
             "clear_drawing" => {
                 use crate::screen_tools::ScreenOverlay;
-                state.shell.clear_drawing();
+                if state.shell.clear_drawing() { state.shell.analytics.drawing_cleared("menu"); }
             }
             "check_for_updates" => {
                 let app = app.clone();

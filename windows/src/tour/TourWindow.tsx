@@ -34,6 +34,7 @@ export function TourWindow(props: { host: AmbientHost }) {
     model.onFinish = () => {
       void host.invoke('set_onboarding_completed', { isCompleted: true }).then(() => host.invoke('end_tour', {}));
     };
+    model.onLessonEnded = (lesson, result) => void host.invoke('record_tour_lesson', { lesson, result });
   }, [host, model]);
 
   // Real events in --------------------------------------------------------------------------------------------------
